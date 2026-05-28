@@ -8,8 +8,16 @@ Built for OMT-Consult, a commodity analytics firm covering bitumen markets in Ka
 
 ## The Problem
 
-The weekly report required manually:
-- Pulling prices, railway volumes, and exchange data from several Excel files
+Before automation, every weekly report cycle involved:
+
+**Manual data collection** (multiple sources, done before analysis could start):
+- Exchange rates (RUB, KZT, UZS, KGS, TJS) -- copied manually from CBR website into Excel
+- Weather statistics for 13 cities across 4 countries -- opened rp5.ru per city, recorded min/max/avg temperature
+- Uzbekistan commodity exchange (UzEx) -- manually downloaded bitumen/mazut trade records from uzex.uz
+- Kazakhstan exchanges (ETS, CCX) -- manually pulled weekly trade volumes and prices from two separate portals
+
+**Report assembly** (after data was collected):
+- Consolidating prices, railway volumes, and exchange data across 5 Excel files
 - Writing market commentary for 4 countries + Russia overview (6 sections)
 - Inserting texts and updating tables in PowerPoint
 - Cross-checking numbers against source data
@@ -31,7 +39,13 @@ python run_report.py --write-pptx "Рынок СрАзии_25_05_2026.pptx"
 ## Pipeline Architecture
 
 ```
-Excel sources (Power Query)
+Automated data collection (runs before report)
+    │
+    ├── currency_scraper.py   ← CBR API: daily RUB/KZT/UZS/KGS/TJS → КурсыВалют.xlsx
+    ├── weather_scraper.py    ← Playwright: rp5.ru, 13 cities × 4 countries → weather_central_asia.xlsx
+    └── exchange_scraper.py   ← UzEx (HTML), ETS + CCX (Playwright) → УзБиржа.xlsx, ETS_биржа.xlsx
+    
+Excel sources (Power Query aggregates all of the above)
     │
     ▼
 collect_data.py          ← reads 5 Excel files via xlwings (respects Power Query)
@@ -58,6 +72,12 @@ generate_analytics.py    ← Claude API: 6 analytical sections
 
 ## Technical Highlights
 
+### Automated data collection layer
+Before these scripts existed, exchange rates, weather, and commodity exchange data were all entered manually. Three scrapers replaced that:
+- `currency_scraper.py`: pulls 5 currency pairs from CBR XML API, appends daily rows to Excel via xlwings
+- `weather_scraper.py`: uses Playwright to scrape weekly temperature statistics for 13 cities across Kazakhstan, Uzbekistan, Kyrgyzstan, and Tajikistan from rp5.ru
+- `exchange_scraper.py`: three exchange sources in one script -- UzEx (HTML + pagination), ETS (Playwright, JavaScript-rendered), CCX (internal JSON API + Playwright cookie acquisition). CCX presented a specific challenge: the Kazakhstan national gateway blocks external access, so the script uses Playwright to obtain a valid session cookie before the API call.
+
 ### Multimodal context injection
 RF bitumen PDF reports are loaded from a network server and passed directly to Claude as base64 documents — giving the model current Russian market data without manual copy-paste.
 
@@ -78,12 +98,23 @@ All Excel reads use `xlwings` — not `openpyxl`. This preserves Power Query con
 
 ## Data Sources
 
-| Source | What | Format |
-|--------|------|--------|
+### Automatically collected by scripts
+
+| Script | Source | What | Output |
+|--------|--------|------|--------|
+| `currency_scraper.py` | CBR API (xml) | Daily rates: RUB, KZT, UZS, KGS, TJS vs USD | `КурсыВалют.xlsx` |
+| `weather_scraper.py` | rp5.ru (Playwright) | Weekly temp stats: 13 cities × 4 countries | `weather_central_asia.xlsx` |
+| `exchange_scraper.py` | uzex.uz (HTML) | Uzbekistan commodity exchange: bitumen + mazut deals | `УзБиржа_битум+мазут.xlsx` |
+| `exchange_scraper.py` | ets.kz (Playwright) | Kazakhstan energy exchange: bitumen trade volumes | `ETS_биржа.xlsx` |
+| `exchange_scraper.py` | ccx.kz (API + Playwright) | Kazakhstan Central Asian exchange: bitumen prices | `ETS_биржа.xlsx` |
+
+### Excel source files (read by collect_data.py)
+
+| File | What | Format |
+|------|------|--------|
 | `Сборка_Цены.xlsx` | Producer prices KAZ + UZB exchange + RF refineries | Excel PQ |
 | `нов_ЖД_Сборка.xlsx` | Railway deliveries from RF by country and refinery | Excel PQ |
-| `КурсыВалют.xlsx` | Weekly exchange rates (RUB, KZT, UZS, KGS, TJS) | Excel PQ |
-| `УзБиржа.xlsx` | Uzbekistan commodity exchange raw transactions | Excel |
+| `КурсыВалют.xlsx` | Weekly exchange rates | Excel PQ |
 | `Каз_Произв_цены.xlsx` | Kazakhstan producer monitoring prices | Excel |
 | Tavily API | News + trader spot price quotes | Web search |
 | OMT-Consult PDF reports | RF bitumen market (from network server) | PDF |
@@ -104,7 +135,8 @@ All Excel reads use `xlwings` — not `openpyxl`. This preserves Power Query con
 
 | Layer | Tools |
 |-------|-------|
-| Data extraction | Python, xlwings, Power Query |
+| Data collection | Python, requests, Playwright (headless Chromium) |
+| Data extraction | xlwings, Power Query |
 | Search & enrichment | Tavily API |
 | LLM generation | Anthropic Claude API (Sonnet), multimodal (PDF) |
 | Report assembly | python-pptx, win32com |
