@@ -1,0 +1,28 @@
+# credentials and environment
+.env
+*token*.json
+*credentials*.json
+
+# Excel and Office temp files
+~$*
+*.tmp
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# output files (generated, not code)
+analytics_*.txt
+news_*.txt
+market_prices_*.txt
+fact_check_*.txt
+debug_*.txt
+weekly_events_log.md
+
+# large binary files
+*.xlsx
+*.pptx
+*.docx
+*.pdf
+*.png

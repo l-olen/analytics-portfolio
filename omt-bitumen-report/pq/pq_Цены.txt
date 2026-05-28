@@ -1,0 +1,124 @@
+//--ЦЕНЫ_Каз_Узб
+// Единая таблица цен: КАЗ + УЗБ + РФ в тг + РФ в сумах
+// Фильтр для графиков по ЕдИзм:
+//   "тыс. тг"  → Казахстан + Россия (сравнение на одном графике)
+//   "млн. сум" → Узбекистан + Россия (сравнение на одном графике)
+// Параметры: Путь_ЦеныКАЗ, Путь_УзБиржа, Путь_ЦеныРФ, Путь_КурсыВалют
+let
+    ФайлКАЗ = File.Contents(Функция_параметр("Путь_ЦеныКАЗ")),
+    ФайлУЗБ = File.Contents(Функция_параметр("Путь_УзБиржа")),
+    ФайлРФ  = File.Contents(Функция_параметр("Путь_ЦеныРФ")),
+    ФайлКВ  = File.Contents(Функция_параметр("Путь_КурсыВалют")),
+
+    // === КАЗ: индикативная цена (тыс.тг/т) ===
+    КАЗ_Дан = Excel.Workbook(ФайлКАЗ, null, true){[Item="КАЗ_по_месяцам", Kind="Table"]}[Data],
+    КАЗ_Тип = Table.TransformColumnTypes(КАЗ_Дан, {
+        {"Год", Int64.Type}, {"Месяц", Int64.Type}, {"Индикат цена тг/т", type number}}),
+    КАЗ_Рен = Table.RenameColumns(КАЗ_Тип, {{"Месяц", "НомерМесяца"}}),
+    КАЗ_Стр = Table.SelectRows(КАЗ_Рен, each [#"Индикат цена тг/т"] <> null and [#"Индикат цена тг/т"] <> 0),
+    КАЗ_Кл  = Table.AddColumn(КАЗ_Стр, "КлючМесяца", each [Год]*100+[НомерМесяца], Int64.Type),
+    КАЗ_Дт  = Table.AddColumn(КАЗ_Кл, "Дата", each #date([Год],[НомерМесяца],1), type date),
+    КАЗ_Цн  = Table.AddColumn(КАЗ_Дт, "Цена", each [#"Индикат цена тг/т"]/1000, type number),
+    КАЗ = Table.SelectColumns(
+        Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(КАЗ_Цн,
+            "Страна", each "Казахстан", type text),
+            "ТипЦены", each "Средняя", type text),
+            "ЕдИзм", each "тыс. тг", type text),
+            "Источник", each "ЦеныКАЗ", type text),
+        {"Дата","Год","НомерМесяца","КлючМесяца","Страна","ТипЦены","ЕдИзм","Цена","Источник"}),
+
+    // === УЗБ: биржевая цена (млн.сум/т, мин/макс/ср) ===
+    УЗБ_Дан = Excel.Workbook(ФайлУЗБ, null, true){[Item="БНД_по_месяцам", Kind="Table"]}[Data],
+    УЗБ_Тип = Table.TransformColumnTypes(УЗБ_Дан, {
+        {"Год", Int64.Type}, {"Месяц", Int64.Type},
+        {"Мин цена, сум", type number}, {"Макс цена, сум", type number}, {"Ср цена, сум", type number}}),
+    УЗБ_Рен = Table.RenameColumns(УЗБ_Тип, {{"Месяц", "НомерМесяца"}}),
+    УЗБ_Стр = Table.SelectRows(УЗБ_Рен, each [#"Ср цена, сум"] <> null and [#"Ср цена, сум"] <> 0),
+    УЗБ_Кл  = Table.AddColumn(УЗБ_Стр, "КлючМесяца", each [Год]*100+[НомерМесяца], Int64.Type),
+    УЗБ_Дт  = Table.AddColumn(УЗБ_Кл, "Дата", each #date([Год],[НомерМесяца],1), type date),
+    УЗБ_Выб = Table.SelectColumns(УЗБ_Дт, {"Дата","Год","НомерМесяца","КлючМесяца",
+        "Мин цена, сум","Макс цена, сум","Ср цена, сум"}),
+    УЗБ_Unp = Table.Unpivot(УЗБ_Выб,
+        {"Мин цена, сум","Макс цена, сум","Ср цена, сум"}, "ТипRaw", "ЦенаСум"),
+    УЗБ_ТЦ  = Table.AddColumn(УЗБ_Unp, "ТипЦены", each
+        if [ТипRaw] = "Ср цена, сум" then "Средняя"
+        else if [ТипRaw] = "Мин цена, сум" then "Мин"
+        else "Макс", type text),
+    УЗБ = Table.SelectColumns(
+        Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(УЗБ_ТЦ,
+            "Страна", each "Узбекистан", type text),
+            "ЕдИзм", each "млн. сум", type text),
+            "Цена", each [ЦенаСум]/1000000, type number),
+            "Источник", each "УзБиржа", type text),
+        {"Дата","Год","НомерМесяца","КлючМесяца","Страна","ТипЦены","ЕдИзм","Цена","Источник"}),
+
+    // === Курсы для РФ ===
+    // KZT/RUB: дневные → месячное среднее
+    КЗТ_Дан = Excel.Workbook(ФайлКВ, null, true){[Item="kzt_rub", Kind="Table"]}[Data],
+    КЗТ_Тип = Table.TransformColumnTypes(КЗТ_Дан, {{"Date", type date}, {"RUB", type number}}),
+    КЗТ_Г   = Table.AddColumn(КЗТ_Тип, "Год", each Date.Year([Date]), Int64.Type),
+    КЗТ_М   = Table.AddColumn(КЗТ_Г, "Месяц", each Date.Month([Date]), Int64.Type),
+    КЗТ_Гр  = Table.Group(КЗТ_М, {"Год","Месяц"}, {{"KZT_RUB", each List.Average([RUB]), type number}}),
+
+    // UZS/RUB = USD/UZS / USD/RUB
+    КВ_Дан  = Excel.Workbook(ФайлКВ, null, true){[Item="Все_по_месяцам", Kind="Table"]}[Data],
+    КВ_Тип  = Table.TransformColumnTypes(КВ_Дан, {
+        {"Год", Int64.Type}, {"Месяц", Int64.Type}, {"узб.сум ср", type number}}),
+    КВ_УЗС  = Table.SelectColumns(КВ_Тип, {"Год","Месяц","узб.сум ср"}),
+    РУБ_Дан = Excel.Workbook(ФайлКВ, null, true){[Item="rub", Kind="Table"]}[Data],
+    РУБ_Тип = Table.TransformColumnTypes(РУБ_Дан, {{"data", type date}, {"curs", type number}}),
+    РУБ_Г   = Table.AddColumn(РУБ_Тип, "Год", each Date.Year([data]), Int64.Type),
+    РУБ_М   = Table.AddColumn(РУБ_Г, "Месяц", each Date.Month([data]), Int64.Type),
+    РУБ_Гр  = Table.Group(РУБ_М, {"Год","Месяц"}, {{"USD_RUB", each List.Average([curs]), type number}}),
+    КВ_Мрж  = Table.ExpandTableColumn(
+        Table.NestedJoin(КВ_УЗС, {"Год","Месяц"}, РУБ_Гр, {"Год","Месяц"}, "_р", JoinKind.LeftOuter),
+        "_р", {"USD_RUB"}),
+    КВ_УЗСРУБ = Table.AddColumn(КВ_Мрж, "UZS_RUB",
+        each if [#"узб.сум ср"] = null or [USD_RUB] = null or [USD_RUB] = 0
+             then null else [#"узб.сум ср"] / [USD_RUB], type number),
+
+    // === РФ: загрузка (ВСЕ НПЗ среднее, с НДС) ===
+    РФ_Дан = Excel.Workbook(ФайлРФ, null, true){[Item="РФ_по_месяцам", Kind="Table"]}[Data],
+    РФ_Тип = Table.TransformColumnTypes(РФ_Дан, {
+        {"Год", Int64.Type}, {"Месяц", Int64.Type}, {"Ср цена с НДС, руб/т", type number}}),
+    РФ_Стр = Table.SelectRows(РФ_Тип, each [#"Пункт отгрузки"] = "ВСЕ НПЗ (среднее)"
+        and [#"Ср цена с НДС, руб/т"] <> null),
+    РФ_Выб = Table.SelectColumns(РФ_Стр, {"Год","Месяц","Ср цена с НДС, руб/т"}),
+
+    // РФ в тенге (для графика КАЗ)
+    РФ_ТГ_Джн = Table.ExpandTableColumn(
+        Table.NestedJoin(РФ_Выб, {"Год","Месяц"}, КЗТ_Гр, {"Год","Месяц"}, "_кв", JoinKind.LeftOuter),
+        "_кв", {"KZT_RUB"}),
+    РФ_ТГ_Фил = Table.SelectRows(РФ_ТГ_Джн, each [KZT_RUB] <> null),
+    РФ_ТГ_Кл  = Table.AddColumn(РФ_ТГ_Фил, "КлючМесяца", each [Год]*100+[Месяц], Int64.Type),
+    РФ_ТГ_Дт  = Table.AddColumn(РФ_ТГ_Кл, "Дата", each #date([Год],[Месяц],1), type date),
+    РФ_ТГ_Рен = Table.RenameColumns(РФ_ТГ_Дт, {{"Месяц","НомерМесяца"}}),
+    РФ_ТГ = Table.SelectColumns(
+        Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(РФ_ТГ_Рен,
+            "Цена", each [#"Ср цена с НДС, руб/т"] * [KZT_RUB] / 1000, type number),
+            "Страна", each "Россия", type text),
+            "ТипЦены", each "Средняя", type text),
+            "ЕдИзм", each "тыс. тг", type text),
+            "Источник", each "ЦеныРФ", type text),
+        {"Дата","Год","НомерМесяца","КлючМесяца","Страна","ТипЦены","ЕдИзм","Цена","Источник"}),
+
+    // РФ в сумах (для графика УЗБ)
+    РФ_СУМ_Джн = Table.ExpandTableColumn(
+        Table.NestedJoin(РФ_Выб, {"Год","Месяц"}, КВ_УЗСРУБ, {"Год","Месяц"}, "_кв", JoinKind.LeftOuter),
+        "_кв", {"UZS_RUB"}),
+    РФ_СУМ_Фил = Table.SelectRows(РФ_СУМ_Джн, each [UZS_RUB] <> null),
+    РФ_СУМ_Кл  = Table.AddColumn(РФ_СУМ_Фил, "КлючМесяца", each [Год]*100+[Месяц], Int64.Type),
+    РФ_СУМ_Дт  = Table.AddColumn(РФ_СУМ_Кл, "Дата", each #date([Год],[Месяц],1), type date),
+    РФ_СУМ_Рен = Table.RenameColumns(РФ_СУМ_Дт, {{"Месяц","НомерМесяца"}}),
+    РФ_СУМ = Table.SelectColumns(
+        Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(РФ_СУМ_Рен,
+            "Цена", each [#"Ср цена с НДС, руб/т"] * [UZS_RUB] / 1000000, type number),
+            "Страна", each "Россия", type text),
+            "ТипЦены", each "Средняя", type text),
+            "ЕдИзм", each "млн. сум", type text),
+            "Источник", each "ЦеныРФ", type text),
+        {"Дата","Год","НомерМесяца","КлючМесяца","Страна","ТипЦены","ЕдИзм","Цена","Источник"}),
+
+    Финал = Table.Combine({КАЗ, УЗБ, РФ_ТГ, РФ_СУМ})
+in
+    Финал

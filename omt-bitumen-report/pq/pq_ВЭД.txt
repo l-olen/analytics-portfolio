@@ -1,0 +1,153 @@
+//--ВЭД_Каз
+let
+    ПутьФайла = Функция_параметр("Путь_ВЭД_Каз"),
+    ИмяТаблицы = Функция_параметр("Таблица_ВЭД_Каз"),
+    Книга = Excel.Workbook(File.Contents(ПутьФайла), null, true),
+    Данные = Книга{[Item=ИмяТаблицы, Kind="Table"]}[Data],
+
+НормализацияТекста =
+Table.TransformColumns(
+    Данные,
+    {
+        {"СтранаОтчета", each Text.Proper(Text.Lower(Text.Trim(_))), type text},
+{"СтранаОтправления", each Text.Proper(Text.Lower(Text.Trim(_))), type text},
+{"СтранаНазначения", each Text.Proper(Text.Lower(Text.Trim(_))), type text},
+        {"Компания", each Text.Proper(Text.Lower(Text.Trim(_))), type text},
+        {"НПЗ", each Text.Proper(Text.Lower(Text.Trim(_))), type text},
+        {"Отправитель", each Text.Proper(Text.Lower(Text.Trim(_))), type text},
+        {"Вид", each Text.Upper(Text.Trim(_)), type text}
+    }
+)
+in
+    НормализацияТекста
+
+//--ВЭД_Узб
+let
+    ПутьФайла = Функция_параметр("Путь_ВЭД_Узб"),
+    ИмяТаблицы = Функция_параметр("Таблица_ВЭД_Узб"),
+    Книга = Excel.Workbook(File.Contents(ПутьФайла), null, true),
+    Данные = Книга{[Item=ИмяТаблицы, Kind="Table"]}[Data],
+
+    // Типы
+    Типы = Table.TransformColumnTypes(
+        Данные,
+        {
+            {"Дата", type date},
+            {"СтранаОтчета", type text},
+            {"Направление", type text},
+            {"СтранаОтправления", type text},
+            {"СтранаНазначения", type text},
+            {"Отправитель", type text},
+            {"НПЗ", type text},
+            {"Компания", type text},
+            {"Вид", type text},
+            {"КодТНВЭД", type text},
+            {"Объем_тыс_т", type number}
+        },
+        "ru-RU"
+    ),
+
+    // Нормализация текста (без ru-RU, здесь не нужно)
+    НормТекста = Table.TransformColumns(
+        Типы,
+        {
+            {"СтранаОтчета", each if _=null then null else Text.Proper(Text.Lower(Text.Trim(Text.From(_)))), type text},
+            {"СтранаОтправления", each if _=null then null else Text.Proper(Text.Lower(Text.Trim(Text.From(_)))), type text},
+            {"СтранаНазначения", each if _=null then null else Text.Proper(Text.Lower(Text.Trim(Text.From(_)))), type text},
+            {"Отправитель", each if _=null then null else Text.Proper(Text.Lower(Text.Trim(Text.From(_)))), type text},
+            {"НПЗ", each if _=null then null else Text.Proper(Text.Lower(Text.Trim(Text.From(_)))), type text},
+            {"Компания", each if _=null then null else Text.Proper(Text.Lower(Text.Trim(Text.From(_)))), type text},
+            {"Вид", each if _=null then null else Text.Upper(Text.Trim(Text.From(_))), type text},
+            {"КодТНВЭД", each if _=null then null else Text.Trim(Text.From(_)), type text}
+        }
+    ),
+
+    // Фильтры ТНВЭД и Вид
+    ФильтрТНВЭД = Table.SelectRows(
+        НормТекста,
+        each Text.StartsWith([КодТНВЭД], "27132") or Text.StartsWith([КодТНВЭД], "2715")
+    ),
+    ФильтрВид = Table.SelectRows(
+        ФильтрТНВЭД,
+        each List.Contains({"БНД","БНС","ПБВ"}, [Вид])
+    ),
+
+    // Убираем нули/пустые
+    БезНулей = Table.SelectRows(ФильтрВид, each [Объем_тыс_т] <> null and [Объем_тыс_т] <> 0),
+
+    // Год / Месяц / Ключ
+    ДобавитьГод = Table.AddColumn(БезНулей, "Год", each Date.Year([Дата]), Int64.Type),
+    ДобавитьНомерМесяца = Table.AddColumn(ДобавитьГод, "НомерМесяца", each Date.Month([Дата]), Int64.Type),
+    ДобавитьКлючМесяца = Table.AddColumn(ДобавитьНомерМесяца, "КлючМесяца", each [Год] * 100 + [НомерМесяца], Int64.Type),
+
+    // Источник
+    ДобавитьИсточник = Table.AddColumn(ДобавитьКлючМесяца, "Источник", each "ВЭД_Уз", type text),
+
+    // Финальный порядок/набор столбцов
+    Финал = Table.SelectColumns(
+        ДобавитьИсточник,
+        {
+            "Дата","Год","НомерМесяца","КлючМесяца",
+            "СтранаОтчета","СтранаОтправления","СтранаНазначения",
+            "Вид","Компания","НПЗ","Отправитель",
+            "Объем_тыс_т","Источник"
+        }
+    ),
+    #"Замененное значение" = Table.ReplaceValue(Финал,"000","Узбекистан",Replacer.ReplaceText,{"СтранаНазначения"}),
+    #"Замененное значение2" = Table.ReplaceValue(#"Замененное значение",null,"Узбекистан",Replacer.ReplaceValue,{"СтранаОтправления"}),
+    #"Замененное значение3" = Table.ReplaceValue(#"Замененное значение2","000","Узбекистан",Replacer.ReplaceText,{"СтранаОтправления"}),
+    #"Замененное значение1" = Table.ReplaceValue(#"Замененное значение3",null,"Узбекистан",Replacer.ReplaceValue,{"СтранаНазначения"})
+in
+    #"Замененное значение1"
+
+
+//--ВЭД_2020_2023_Узб
+let
+    Источник = Excel.Workbook(File.Contents("C:\Users\olenj\OneDrive\Документы\ОМТ-Консалт\Средняя Азия\!!!_Новые квартальные\Исх_Производство_Узбекистан.xlsx"), null, true),
+    ВЭД_2020_2023_Sheet = Источник{[Item="ВЭД_2020_2023",Kind="Sheet"]}[Data],
+    #"Повышенные заголовки" = Table.PromoteHeaders(ВЭД_2020_2023_Sheet, [PromoteAllScalars=true]),
+   Типы = Table.TransformColumnTypes(#"Повышенные заголовки",{{"Дата", type date}, {"Год", Int64.Type}, {"НомерМесяца", Int64.Type}, {"КлючМесяца", Int64.Type}, {"СтранаОтчета", type text}, {"Направление", type text}, {"СтранаПартнер", type text}, {"Вид", type text}, {"Компания", type text}, {"НПЗ", type text}, {"Отправитель", type text}, {"Объем_тыс_т", type number}, {"Источник", type text}}),
+
+ДобавитьСтранаОтправления = Table.AddColumn(
+        Типы,
+        "СтранаОтправления",
+        each if [Направление] = "Импорт" then [СтранаПартнер] else [СтранаОтчета],
+        type text
+    ),
+    ДобавитьСтранаНазначения = Table.AddColumn(
+        ДобавитьСтранаОтправления,
+        "СтранаНазначения",
+        each if [Направление] = "Импорт" then [СтранаОтчета] else [СтранаПартнер],
+        type text
+    )
+in
+    ДобавитьСтранаНазначения
+
+
+//--ВЭД
+let
+    Источник = Table.Combine({ВЭД_Узб, ВЭД_2020_2023_Узб, ВЭД_Каз}),
+    #"Строки с примененным фильтром" = Table.SelectRows(Источник, each true),
+    #"Измененный тип1" = Table.TransformColumnTypes(#"Строки с примененным фильтром",{{"НомерМесяца", Int64.Type}, {"Год", Int64.Type}, {"КлючМесяца", Int64.Type}, {"Объем_тыс_т", type number}}),
+    #"Добавленный запрос" = Table.Combine({#"Измененный тип1", ЖД_Кирг_Тадж}),
+    Пользовательский1 = Table.AddColumn(
+    #"Добавленный запрос",
+    "СтранаКомпания",
+    each
+        if [Компания] = null or Text.Trim([Компания]) = "" then
+            if [СтранаОтчета] = [СтранаНазначения]
+            then [СтранаОтправления]
+            else [СтранаНазначения]
+        else
+            if [СтранаОтчета] = [СтранаНазначения]
+            then [СтранаОтправления] & ", " & [Компания]
+            else [СтранаНазначения] & ", " & [Компания],
+    type text
+),
+    #"Замененное значение" = Table.ReplaceValue(Пользовательский1,"Киргизия","Кыргызстан",Replacer.ReplaceText,{"СтранаНазначения"}),
+    #"Замененное значение1" = Table.ReplaceValue(#"Замененное значение","Киргизия","Кыргызстан",Replacer.ReplaceText,{"СтранаОтправления"}),
+    #"Замененное значение2" = Table.ReplaceValue(#"Замененное значение1","Киргизия","Кыргызстан",Replacer.ReplaceText,{"СтранаОтчета"}),
+    #"Замененное значение3" = Table.ReplaceValue(#"Замененное значение2","Кыргызстан","Казахстан, Тоо ""Казахбитум""",Replacer.ReplaceText,{"СтранаКомпания"}),
+    #"Замененное значение4" = Table.ReplaceValue(#"Замененное значение3","Таджикистан, Прочие","Узбекистан, Прочие",Replacer.ReplaceText,{"СтранаКомпания"})
+in
+    #"Замененное значение4"

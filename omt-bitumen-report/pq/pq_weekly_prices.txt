@@ -1,0 +1,284 @@
+Файл: Сборка_Цены.xlsx
+Запросы Power Query (Data → Get Data → Launch Power Query Editor → Advanced Editor)
+
+Порядок создания: КАЗ_произв, КАЗ_ЕТС, УЗБ_биржа → потом Сборка_цены.
+Первые три — Connection Only. Последние два — загружать на лист.
+
+================================================================================
+ЗАПРОС 1а: КАЗ_произв  (вспомогательный, Connection Only)
+Источник: Каз_Произв_цены.xlsx → лист "Цены производителей"
+Весь период. Дата в источнике уже хранится пятницей.
+================================================================================
+
+let
+    Пути   = Table.Buffer(Excel.CurrentWorkbook(){[Name="tbl_Пути"]}[Content]),
+    Source = Excel.Workbook(File.Contents(Пути{4}[Путь]), null, true),
+    SheetData       = Source{[Item = "Цены производителей", Kind = "Sheet"]}[Data],
+    PromotedHeaders = Table.PromoteHeaders(SheetData, [PromoteAllScalars = true]),
+    // Колонка A пустая — берём только нужные именованные столбцы
+    Selected = Table.SelectColumns(PromotedHeaders, {
+        "Дата", "Производитель", "Вид базиса",
+        "Вид транспорта", "Марка", "Цена за тонну"
+    }),
+    // Убираем строки без даты и без числовой цены
+    Filtered = Table.SelectRows(Selected, each
+        [Дата] <> null
+        and Value.Is([Дата], type datetime)
+    ),
+    TypedCols = Table.TransformColumnTypes(Filtered, {
+        {"Дата", type date}, {"Цена за тонну", type number}
+    }),
+    // "Qazaq Bitum  " → "Qazaq Bitum"
+    TrimProducer = Table.TransformColumns(TypedCols, {{"Производитель", Text.Trim}}),
+    // Справочник: краткое имя → полное юридическое название
+    CompanyLookup = #table(
+        type table [Производитель = text, #"Наименование компании" = text],
+        {
+            {"ПНХЗ",        "ТОО ""Павлодарский нефтехимический завод"""},
+            {"Caspi Bitum", "ТОО СП ""Caspi Bitum"""},
+            {"Qazaq Bitum", "ТОО ""КазахБитум"""},
+            {"АБЗ",         "ТОО ""Асфальтобетон 1"""},
+            {"АБЗ-1",       "ТОО ""Асфальтобетон 1"""}
+        }
+    ),
+    Joined   = Table.NestedJoin(TrimProducer, {"Производитель"},
+                   CompanyLookup, {"Производитель"}, "_c", JoinKind.LeftOuter),
+    Expanded = Table.ExpandTableColumn(Joined, "_c", {"Наименование компании"}),
+    AddCurrency = Table.AddColumn(Expanded, "Валюта", each "тенге", type text),
+    AddSource   = Table.AddColumn(AddCurrency, "Источник", each "Мониторинг", type text),
+    AddCountry  = Table.AddColumn(AddSource, "Страна", each "Казахстан", type text),
+    Result = Table.SelectColumns(AddCountry, {
+        "Дата", "Источник", "Страна", "Наименование компании", "Производитель",
+        "Вид базиса", "Вид транспорта", "Марка", "Цена за тонну", "Валюта"
+    })
+in
+    Result
+
+
+================================================================================
+ЗАПРОС 1б: КАЗ_ЕТС  (вспомогательный, Connection Only)
+Источник: ETS_биржа.xlsx → лист "КАЗ_ETS_База"
+Весь период. Агрегация по неделям (Пятница) + Производитель + Транспорт + Марка,
+взвешенная средняя цена.
+================================================================================
+
+let
+    Пути   = Table.Buffer(Excel.CurrentWorkbook(){[Name="tbl_Пути"]}[Content]),
+    Source = Excel.Workbook(File.Contents(Пути{5}[Путь]), null, true),
+    SheetData       = Source{[Item = "КАЗ_ETS_База", Kind = "Sheet"]}[Data],
+    PromotedHeaders = Table.PromoteHeaders(SheetData, [PromoteAllScalars = true]),
+    Filtered = Table.SelectRows(PromotedHeaders,
+                   each [Дата] <> null and [Пятница] <> null),
+    TypedCols = Table.TransformColumnTypes(Filtered, {
+        {"Пятница", type date},
+        {"Ср цена, тенге", type number},
+        {"Объём, тонн", type number}
+    }),
+    // Агрегация по всему периоду: одна строка на неделю × производитель × транспорт × марка
+    Grouped = Table.Group(
+        TypedCols,
+        {"Пятница", "Производитель", "Вид транспорта", "Марка битума"},
+        {{
+            "Цена за тонну",
+            (t) =>
+                let
+                    prices = t[#"Ср цена, тенге"],
+                    vols   = t[#"Объём, тонн"],
+                    totalV = List.Sum(vols)
+                in
+                    if totalV = null or totalV = 0
+                    then List.Average(prices)
+                    else List.Sum(
+                             List.Transform(List.Positions(prices),
+                                 (i) => prices{i} * vols{i})
+                         ) / totalV,
+            type number
+        }}
+    ),
+    Renamed = Table.RenameColumns(Grouped, {
+        {"Пятница", "Дата"}, {"Марка битума", "Марка"}
+    }),
+    ETSCompany = #table(
+        type table [Производитель = text, #"Наименование компании" = text],
+        {
+            {"Caspi Bitum",      "ТОО СП ""Caspi Bitum"""},
+            {"Павлодарский НПЗ", "ТОО ""Павлодарский нефтехимический завод"""},
+            {"Qazaq Bitum",      "ТОО ""КазахБитум"""},
+            {"АБЗ-1",            "ТОО ""Асфальтобетон 1"""}
+        }
+    ),
+    Joined   = Table.NestedJoin(Renamed, {"Производитель"},
+                   ETSCompany, {"Производитель"}, "_c", JoinKind.LeftOuter),
+    Expanded = Table.ExpandTableColumn(Joined, "_c", {"Наименование компании"}),
+    AddBasis    = Table.AddColumn(Expanded, "Вид базиса", each "НПЗ", type text),
+    AddCurrency = Table.AddColumn(AddBasis, "Валюта", each "тенге", type text),
+    AddSource   = Table.AddColumn(AddCurrency, "Источник", each "Биржа", type text),
+    AddCountry  = Table.AddColumn(AddSource, "Страна", each "Казахстан", type text),
+    Result = Table.SelectColumns(AddCountry, {
+        "Дата", "Источник", "Страна", "Наименование компании", "Производитель",
+        "Вид базиса", "Вид транспорта", "Марка", "Цена за тонну", "Валюта"
+    })
+in
+    Result
+
+
+================================================================================
+ЗАПРОС 1в: УЗБ_биржа  (вспомогательный, Connection Only)
+Источник: УзБиржа.xlsx → лист "БНД_по_дням"
+Весь период. Для каждого дня вычисляет Пятницу его недели,
+затем агрегирует по неделям × маркам (взвешенная средняя цена).
+================================================================================
+
+let
+    Пути   = Table.Buffer(Excel.CurrentWorkbook(){[Name="tbl_Пути"]}[Content]),
+    Source = Excel.Workbook(File.Contents(Пути{2}[Путь]), null, true),
+    SheetData       = Source{[Item = "БНД_База", Kind = "Sheet"]}[Data],
+    PromotedHeaders = Table.PromoteHeaders(SheetData, [PromoteAllScalars = true]),
+    Filtered = Table.SelectRows(PromotedHeaders,
+                   each [Дата] <> null
+                   and [#"Кол-во тонн"] <> null
+                   and [#"Кол-во тонн"] > 0
+                   and [Марка] <> null
+                   and [Марка] <> "-"),
+    TypedCols = Table.TransformColumnTypes(Filtered, {
+        {"Дата", type date},
+        {"Кол-во тонн", type number},
+        {"Цена за тонну, сум", type number}
+    }),
+    // Вычисляем Пятницу для каждой строки
+    AddFriday = Table.AddColumn(TypedCols, "Пятница",
+        each Date.AddDays(Date.StartOfWeek([Дата], Day.Monday), 4), type date),
+    // Агрегация по неделе × марке: взвешенная средняя по объёму
+    Grouped = Table.Group(
+        AddFriday,
+        {"Пятница", "Марка"},
+        {{
+            "Цена за тонну",
+            (t) =>
+                let
+                    prices = t[#"Цена за тонну, сум"],
+                    vols   = t[#"Кол-во тонн"],
+                    totalV = List.Sum(vols)
+                in
+                    if totalV = null or totalV = 0
+                    then List.Average(prices)
+                    else List.Sum(
+                             List.Transform(List.Positions(prices),
+                                 (i) => prices{i} * vols{i})
+                         ) / totalV,
+            type number
+        }}
+    ),
+    Renamed     = Table.RenameColumns(Grouped, {{"Пятница", "Дата"}}),
+    AddCompany  = Table.AddColumn(Renamed, "Наименование компании",
+                      each "ООО ""Ферганский нефтеперерабатывающий завод""", type text),
+    AddProducer = Table.AddColumn(AddCompany, "Производитель", each "ФНПЗ", type text),
+    AddBasis    = Table.AddColumn(AddProducer, "Вид базиса", each "НПЗ", type text),
+    AddTransport = Table.AddColumn(AddBasis, "Вид транспорта", each null, type text),
+    AddCurrency  = Table.AddColumn(AddTransport, "Валюта", each "сум", type text),
+    AddSource    = Table.AddColumn(AddCurrency, "Источник", each "Биржа", type text),
+    AddCountry   = Table.AddColumn(AddSource, "Страна", each "Узбекистан", type text),
+    Result = Table.SelectColumns(AddCountry, {
+        "Дата", "Источник", "Страна", "Наименование компании", "Производитель",
+        "Вид базиса", "Вид транспорта", "Марка", "Цена за тонну", "Валюта"
+    })
+in
+    Result
+
+
+================================================================================
+ЗАПРОС 1: Сборка_цены  (ОСНОВНОЙ — загрузить на лист)
+Объединяет три источника за весь период.
+Сортировка: дата возрастание, затем производитель.
+================================================================================
+
+let
+    KazProizv = КАЗ_произв,
+    KazETS    = КАЗ_ЕТС,
+    UzbBirzha = УЗБ_биржа,
+    Combined  = Table.Combine({KazProizv, KazETS, UzbBirzha}),
+    Sorted    = Table.Sort(Combined, {
+        {"Дата", Order.Ascending},
+        {"Производитель", Order.Ascending},
+        {"Вид транспорта", Order.Ascending}
+    }),
+
+    // Справочник география по производителю
+    GeoLookup = #table(
+        type table [Производитель = text, Кластер = text, Регион = text],
+        {
+            {"АБЗ",              "Юг",            "Алматинская область"},
+            {"АБЗ-1",            "Юг",            "Алматинская область"},
+            {"Caspi Bitum",      "Запад",          "Мангистауская область"},
+            {"ПНХЗ",             "Центр и Север",  "Павлодарская область"},
+            {"Павлодарский НПЗ", "Центр и Север",  "Павлодарская область"},
+            {"Qazaq Bitum",      "Юг",             "Туркестанская область"},
+            {"ФНПЗ",             "Юг",             "Ферганская область"}
+        }
+    ),
+    WithGeo   = Table.NestedJoin(Sorted, {"Производитель"}, GeoLookup, {"Производитель"}, "_g", JoinKind.LeftOuter),
+    ExpandGeo = Table.ExpandTableColumn(WithGeo, "_g", {"Кластер", "Регион"}),
+    Renamed   = Table.RenameColumns(ExpandGeo, {
+        {"Производитель", "Пункт отгрузки"},
+        {"Вид транспорта", "Вид цен"}
+    }),
+    Reordered = Table.ReorderColumns(Renamed, {
+        "Дата", "Источник", "Страна", "Кластер", "Регион",
+        "Наименование компании", "Пункт отгрузки",
+        "Вид базиса", "Вид цен", "Марка", "Цена за тонну", "Валюта"
+    })
+in
+    Reordered
+
+
+================================================================================
+ЗАПРОС 2: ЕТС_по_дням  (ОСНОВНОЙ — загрузить на лист, независимый)
+Источник: ETS_биржа.xlsx → лист "КАЗ_ETS_База"
+Последние 20 строк в хронологическом порядке (старые → новые).
+================================================================================
+
+let
+    Пути   = Table.Buffer(Excel.CurrentWorkbook(){[Name="tbl_Пути"]}[Content]),
+    Source = Excel.Workbook(File.Contents(Пути{5}[Путь]), null, true),
+    SheetData       = Source{[Item = "КАЗ_ETS_База", Kind = "Sheet"]}[Data],
+    PromotedHeaders = Table.PromoteHeaders(SheetData, [PromoteAllScalars = true]),
+    Filtered = Table.SelectRows(PromotedHeaders, each [Дата] <> null),
+    Selected = Table.SelectColumns(Filtered, {
+        "Дата", "Производитель", "Вид транспорта", "Марка битума",
+        "Мин цена, тенге", "Макс цена, тенге", "Ср цена, тенге",
+        "Объём, тонн", "Кол-во сделок"
+    }),
+    // Берём последние 20 строк, выводим в хронологическом порядке
+    SortedDesc = Table.Sort(Selected, {{"Дата", Order.Descending}}),
+    Last20     = Table.FirstN(SortedDesc, 20),
+    SortedAsc  = Table.Sort(Last20, {{"Дата", Order.Ascending}}),
+    SetTypes = Table.TransformColumnTypes(SortedAsc, {
+        {"Дата", type date},
+        {"Мин цена, тенге", type number},
+        {"Макс цена, тенге", type number},
+        {"Ср цена, тенге", type number},
+        {"Объём, тонн", type number},
+        {"Кол-во сделок", type number}
+    })
+in
+    SetTypes
+
+
+================================================================================
+ПРИМЕЧАНИЯ
+================================================================================
+
+Порядок создания в Excel:
+  1. КАЗ_произв   → Connection Only
+  2. КАЗ_ЕТС      → Connection Only
+  3. УЗБ_биржа    → Connection Only
+  4. Сборка_цены  → Load to worksheet
+  5. ЕТС_по_дням  → Load to worksheet
+
+Объём данных Сборка_цены (ориентировочно):
+  КАЗ_произв: ~1570 строк (данные с 2022 г.)
+  КАЗ_ЕТС:    ~93 агрег. строки (данные с марта 2023 г.)
+  УЗБ_биржа:  ~1370 строк → после агрегации по неделям ~220 строк
+
+Если появится новый производитель — добавить строку в CompanyLookup
+или ETSCompany внутри соответствующего запроса (Advanced Editor).
