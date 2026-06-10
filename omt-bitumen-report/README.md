@@ -2,7 +2,7 @@
 
 **End-to-end Python pipeline that turns raw Excel data into a structured analytical PPTX report with LLM-generated commentary — every week.**
 
-Built for OMT-Consult, a commodity analytics firm covering bitumen markets in Kazakhstan, Uzbekistan, Kyrgyzstan, and Tajikistan.
+Built for a commodity analytics firm covering bitumen markets in Kazakhstan, Uzbekistan, Kyrgyzstan, and Tajikistan.
 
 ---
 
@@ -117,7 +117,7 @@ All Excel reads use `xlwings` — not `openpyxl`. This preserves Power Query con
 | `КурсыВалют.xlsx` | Weekly exchange rates | Excel PQ |
 | `Каз_Произв_цены.xlsx` | Kazakhstan producer monitoring prices | Excel |
 | Tavily API | News + trader spot price quotes | Web search |
-| OMT-Consult PDF reports | RF bitumen market (from network server) | PDF |
+| Internal PDF reports | RF bitumen market (from network server) | PDF |
 
 ---
 
