@@ -154,7 +154,7 @@ Recommended use: Base = operational plan. Conservative = downside bound. Aggress
 
 ## Task 2 Case B: GA4 / GTM Audit
 
-**Problem:** 40% organic session drop in GA4 starting post-2024. Could be a tracking issue or a real traffic drop.
+**Problem:** 35% organic session drop in GA4 starting post-2024. Could be a tracking issue or a real traffic drop.
 
 **Critical first step: rule out non-tracking causes.** Before touching GTM or GA4, check:
 - robots.txt / noindex tags — was the site accidentally de-indexed?
