@@ -20,6 +20,20 @@ fact_check_*.txt
 debug_*.txt
 weekly_events_log.md
 
+# clinic-marketing-analytics: real (non-anonymized) data and credentials
+clinic-marketing-analytics/data/
+clinic-marketing-analytics/dashboards/csv/
+clinic-marketing-analytics/etl/.env
+
+# clinic-marketing-analytics: private utilities not part of the portfolio
+# (contain live AmoCRM subdomain / export real, non-anonymized data)
+clinic-marketing-analytics/etl/explore_lead.py
+clinic-marketing-analytics/etl/explore_fields.py
+clinic-marketing-analytics/etl/explore_pipelines.py
+clinic-marketing-analytics/etl/reauth_amo.py
+clinic-marketing-analytics/dashboards/export_to_sheets.py
+clinic-marketing-analytics/dashboards/campaign_map_local.py
+
 # large binary files
 *.xlsx
 *.pptx
