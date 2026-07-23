@@ -117,6 +117,8 @@ def main():
         ("channel_monthly",  CSV_DIR / "education_channel_monthly.csv"),
         ("ads_campaigns",    CSV_DIR / "education_ads_campaigns.csv"),
         ("ads_monthly",      CSV_DIR / "education_ads_monthly.csv"),
+        ("audience",         CSV_DIR / "education_audience.csv"),
+        ("creative_themes",  CSV_DIR / "education_creative_themes.csv"),
     ]
 
     url_education = upload_group(gc,

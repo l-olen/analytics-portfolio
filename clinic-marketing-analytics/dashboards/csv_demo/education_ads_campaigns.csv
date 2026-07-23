@@ -1,15 +1,18 @@
 campaign_name,spend_usd,clicks,impressions,crm_leads,won,cpl_usd,cpa_usd
-Certification_PMax,13648.8,23960,1024208,0,0,,
+Certification_PMax,17125.2,25604,1158844,0,0,,
 EduCenter_AllCourses_Search,10692.0,6736,58524,172,12,62.2,891.0
-UniPrep_HotDemand_Search,6381.6,2372,50704,0,0,,
-EduCenter_AllCourses_PMax,6086.4,114216,1017480,116,4,52.5,1521.6
-EduCenter_English_Search,4965.6,3612,41208,84,0,59.1,
-EduCenter_SubjectCourses_Search,4180.8,1412,12472,92,0,45.4,
-UniPrep_PartnerUniv_Search,4023.6,960,13140,0,0,,
+UniPrep_HotDemand_Search,9973.2,3736,78336,0,0,,
+EduCenter_AllCourses_PMax,6860.4,117172,1066012,116,4,59.1,1715.1
+UniPrep_PartnerUniv_Search,6147.6,1664,18848,0,0,,
+EduCenter_English_Search,5198.4,3672,41960,84,0,61.9,
+EduCenter_SubjectCourses_Search,4790.4,1836,17060,92,0,52.1,
+Edu_Подготовка,3189.6,1076,13996,172,12,18.5,265.8
 EduCenter_Grade1Prep_Search,3046.8,792,10456,8,0,380.9,
 EduCenter_Remarketing_GDN,2595.6,32860,393120,92,0,28.2,
 UniPrep_UnivPrep_Search,2562.0,576,9944,16,0,160.1,
 UniPrep_General_Search,1636.8,1048,11928,16,0,102.3,
 EduCenter_Law_Search,999.6,216,1384,4,0,249.9,
 UniPrep_Branded_Search,938.4,184,11448,0,0,,
+Edu | Право,639.6,48,412,0,0,,
+Edu | Сертификация,584.4,56,604,0,0,,
 UniPrep_Admission_Search,181.2,176,1240,0,0,,

@@ -13,6 +13,8 @@ Get Data → Text/CSV, подключай каждый файл отдельно
 | `ChannelMonthly` | `education_channel_monthly.csv` |
 | `Campaigns` | `education_ads_campaigns.csv` |
 | `AdsMonthly` | `education_ads_monthly.csv` |
+| `Audience` | `education_audience.csv` |
+| `CreativeThemes` | `education_creative_themes.csv` |
 
 В Power Query для `MonthlyTrend`, `ChannelMonthly`, `AdsMonthly` — добавь вычисляемый столбец:
 ```
@@ -25,7 +27,8 @@ Get Data → Text/CSV, подключай каждый файл отдельно
 - `MonthlyTrend[month]` → `ChannelMonthly[month]` (1:M)
 - `MonthlyTrend[month]` → `AdsMonthly[month]` (1:1)
 
-`ChannelFunnel` и `Campaigns` — отдельные, без связей (нет поля месяца).
+`ChannelFunnel`, `Campaigns`, `Audience`, `CreativeThemes` — отдельные, без связей
+(нет поля месяца).
 
 ## Шаг 3 — DAX меры
 
@@ -64,7 +67,21 @@ CPA (won) =
         SUMX(Campaigns, Campaigns[spend_usd]),
         SUMX(Campaigns, Campaigns[won])
     )
+
+Audience CTR % =
+    DIVIDE(SUM(Audience[clicks]), SUM(Audience[impressions])) * 100
+
+Audience CVR % =
+    DIVIDE(SUM(Audience[conversions]), SUM(Audience[clicks])) * 100
+
+Creative CTR % =
+    DIVIDE(SUM(CreativeThemes[clicks]), SUM(CreativeThemes[impressions])) * 100
 ```
+
+Меры `Audience CTR/CVR %` и `Creative CTR %` — через `DIVIDE` от сумм, а не
+через готовый столбец `ctr_pct`/`cvr_pct` из CSV: при группировке в чарте
+Power BI иначе просуммирует сами проценты, а не пересчитает взвешенное
+значение — цифры "поплывут".
 
 ## Страница 1 — Overview
 
@@ -139,3 +156,43 @@ CPA (won) =
 - Column: `MonthlyTrend[contacts]`
 - Line: `AdsMonthly[spend_usd]`
 - Заголовок: "Leads vs Ad Spend"
+
+## Страница 5 — Audience & Creative
+
+Важно на этой странице: `conversions`/`cvr_pct` в `Audience` — это конверсии
+по трекингу Google Ads, не подтверждённые сделки из CRM (нет click-level
+связи между аудиторным сегментом и конкретным лидом — ограничение API).
+Стоит явно подписать это в подзаголовке страницы или текстовом блоке.
+
+**Clustered Bar** (верхняя левая четверть, `Audience` с visual-level filter
+`dimension = "age_range"`):
+- Y: `Audience[segment_value]`
+- X: `[Audience CVR %]`
+- Заголовок: "Conversion Rate by Age"
+- Сортировка по `[Audience CVR %]` DESC
+
+**Clustered Bar** (верхняя правая четверть, `Audience` с filter
+`dimension = "gender"`):
+- Y: `Audience[segment_value]`
+- X: `[Audience CVR %]`
+- Заголовок: "Conversion Rate by Gender"
+
+**Table** (нижняя левая четверть, `Audience`, filter `dimension = "age_range"`):
+
+| Колонки | Формат |
+|---------|--------|
+| segment_value | — |
+| impressions | целое |
+| ctr_pct | `0.0%` |
+| cvr_pct | `0.0%` |
+| spend_usd | `$#,##0` |
+
+**Bar chart** (нижняя правая четверть, `CreativeThemes`):
+- Y: `CreativeThemes[theme]`
+- X: `[Creative CTR %]`
+- Заголовок: "CTR by Message Theme"
+- Сортировка по `[Creative CTR %]` DESC
+- Data label: значение `ctr_pct` + подпись `headlines_n` в tooltip
+  ("сколько разных заголовков в теме")
+- Условное форматирование столбца — цветовая шкала (красный→зелёный),
+  чтобы сразу было видно провал темы "страх / проблема"

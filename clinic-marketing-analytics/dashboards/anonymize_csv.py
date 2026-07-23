@@ -57,6 +57,15 @@ RULES = {
     "education_ads_monthly.csv": {
         "spend_usd": "S", "clicks": "V", "impressions": "V", "ga_conversions": "V",
     },
+    "education_audience.csv": {
+        "impressions": "V", "clicks": "V", "ctr_pct": None,
+        "conversions": "V", "cvr_pct": None, "spend_usd": "S",
+    },
+    "education_creative_themes.csv": {
+        # headlines_n НЕ масштабируется — это количество реальных вариантов
+        # креатива, а не объёмная метрика; ×4 исказило бы масштаб тестирования
+        "impressions": "V", "clicks": "V", "ctr_pct": None,
+    },
     "medical_channel_funnel.csv": {
         "contacts": "V", "qualified": "V", "rejected": "V", "in_work": "V",
         "qual_pct": None, "got_appointment": "V", "appt_cr_pct": None,

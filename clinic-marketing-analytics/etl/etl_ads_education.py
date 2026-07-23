@@ -2,9 +2,11 @@
 ETL: Google Ads → education_ads.db
 Аккаунт образовательного центра, период: доступная история.
 Таблицы:
-  ads_campaigns   — daily performance по кампаниям
-  ads_keywords    — daily performance по ключевым словам (только Search)
-  ads_search_terms — поисковые запросы (последние 90 дней, Google Ads limit)
+  ads_campaigns      — daily performance по кампаниям
+  ads_keywords       — daily performance по ключевым словам (только Search)
+  ads_search_terms   — поисковые запросы (последние 90 дней, Google Ads limit)
+  ads_demographics   — daily performance по возрасту и полу (агрегат по кампании)
+  ads_creative_assets — daily performance по RSA-ассетам (заголовки/описания)
 """
 
 import os, sys, sqlite3
@@ -81,12 +83,37 @@ def init_db(conn: sqlite3.Connection):
             conversions     REAL DEFAULT 0,
             PRIMARY KEY (date, campaign_id, ad_group_id, search_term)
         );
+
+        CREATE TABLE IF NOT EXISTS ads_demographics (
+            date            TEXT NOT NULL,
+            campaign_id     INTEGER NOT NULL,
+            dimension       TEXT NOT NULL,   -- 'age_range' | 'gender'
+            segment_value   TEXT NOT NULL,   -- напр. AGE_RANGE_18_24, FEMALE
+            impressions     INTEGER DEFAULT 0,
+            clicks          INTEGER DEFAULT 0,
+            cost_micros     INTEGER DEFAULT 0,
+            conversions     REAL DEFAULT 0,
+            PRIMARY KEY (date, campaign_id, dimension, segment_value)
+        );
+
+        CREATE TABLE IF NOT EXISTS ads_creative_assets (
+            date               TEXT NOT NULL,
+            campaign_id        INTEGER NOT NULL,
+            ad_group_id        INTEGER NOT NULL,
+            asset_id           INTEGER NOT NULL,
+            field_type         TEXT NOT NULL,   -- HEADLINE | DESCRIPTION
+            asset_text         TEXT,
+            performance_label  TEXT,
+            impressions        INTEGER DEFAULT 0,
+            clicks             INTEGER DEFAULT 0,
+            PRIMARY KEY (date, ad_group_id, asset_id, field_type)
+        );
     """)
     conn.commit()
 
 
-def get_date_range(conn: sqlite3.Connection):
-    row = conn.execute("SELECT MAX(date) FROM ads_campaigns").fetchone()[0]
+def get_date_range(conn: sqlite3.Connection, table: str = "ads_campaigns"):
+    row = conn.execute(f"SELECT MAX(date) FROM {table}").fetchone()[0]
     if row is None:
         start = date.today() - timedelta(days=INITIAL_DAYS)
     else:
@@ -213,6 +240,100 @@ def fetch_search_terms(client, start_date: str, end_date: str) -> list[dict]:
     return rows
 
 
+def fetch_demographics(client, start_date: str, end_date: str) -> list[dict]:
+    """Возраст и пол — агрегируем по кампании (сырые view — на уровне ad group)."""
+    ga_service = client.get_service("GoogleAdsService")
+    agg: dict = {}   # (date, campaign_id, dimension, segment_value) → [impr, clicks, cost, conv]
+
+    def add(key, impressions, clicks, cost_micros, conversions):
+        bucket = agg.setdefault(key, [0, 0, 0, 0.0])
+        bucket[0] += impressions
+        bucket[1] += clicks
+        bucket[2] += cost_micros
+        bucket[3] += conversions
+
+    age_query = f"""
+        SELECT
+            segments.date,
+            campaign.id,
+            ad_group_criterion.age_range.type,
+            metrics.impressions,
+            metrics.clicks,
+            metrics.cost_micros,
+            metrics.conversions
+        FROM age_range_view
+        WHERE segments.date BETWEEN '{start_date}' AND '{end_date}'
+    """
+    for batch in ga_service.search_stream(customer_id=CUSTOMER_ID, query=age_query):
+        for row in batch.results:
+            key = (row.segments.date, row.campaign.id, "age_range",
+                   row.ad_group_criterion.age_range.type_.name)
+            add(key, row.metrics.impressions, row.metrics.clicks,
+                row.metrics.cost_micros, row.metrics.conversions)
+
+    gender_query = f"""
+        SELECT
+            segments.date,
+            campaign.id,
+            ad_group_criterion.gender.type,
+            metrics.impressions,
+            metrics.clicks,
+            metrics.cost_micros,
+            metrics.conversions
+        FROM gender_view
+        WHERE segments.date BETWEEN '{start_date}' AND '{end_date}'
+    """
+    for batch in ga_service.search_stream(customer_id=CUSTOMER_ID, query=gender_query):
+        for row in batch.results:
+            key = (row.segments.date, row.campaign.id, "gender",
+                   row.ad_group_criterion.gender.type_.name)
+            add(key, row.metrics.impressions, row.metrics.clicks,
+                row.metrics.cost_micros, row.metrics.conversions)
+
+    return [
+        {
+            "date": d, "campaign_id": cid, "dimension": dim, "segment_value": seg,
+            "impressions": v[0], "clicks": v[1], "cost_micros": v[2], "conversions": v[3],
+        }
+        for (d, cid, dim, seg), v in agg.items()
+    ]
+
+
+def fetch_creative_assets(client, start_date: str, end_date: str) -> list[dict]:
+    """RSA-ассеты (заголовки/описания): текст + performance_label + impr/clicks."""
+    ga_service = client.get_service("GoogleAdsService")
+    query = f"""
+        SELECT
+            segments.date,
+            campaign.id,
+            ad_group.id,
+            asset.id,
+            asset.text_asset.text,
+            ad_group_ad_asset_view.field_type,
+            ad_group_ad_asset_view.performance_label,
+            metrics.impressions,
+            metrics.clicks
+        FROM ad_group_ad_asset_view
+        WHERE segments.date BETWEEN '{start_date}' AND '{end_date}'
+          AND ad_group_ad_asset_view.field_type IN ('HEADLINE', 'DESCRIPTION')
+    """
+    rows = []
+    for batch in ga_service.search_stream(customer_id=CUSTOMER_ID, query=query):
+        for row in batch.results:
+            rows.append({
+                "date":              row.segments.date,
+                "campaign_id":       row.campaign.id,
+                "ad_group_id":       row.ad_group.id,
+                "asset_id":          row.asset.id,
+                "field_type":        row.ad_group_ad_asset_view.field_type.name,
+                "asset_text":        row.asset.text_asset.text,
+                "performance_label": row.ad_group_ad_asset_view.performance_label.name,
+                "impressions":       row.metrics.impressions,
+                "clicks":            row.metrics.clicks,
+            })
+    return rows
+
+
 def upsert(conn, table: str, rows: list[dict]):
     if not rows:
         return 0
@@ -220,7 +341,9 @@ def upsert(conn, table: str, rows: list[dict]):
     placeholders = ", ".join("?" * len(cols))
     update_set = ", ".join(f"{c}=excluded.{c}" for c in cols
                            if c not in ("date", "campaign_id", "ad_group_id",
-                                        "keyword_id", "search_term"))
+                                        "keyword_id", "search_term",
+                                        "dimension", "segment_value",
+                                        "asset_id", "field_type"))
     sql = (f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders})"
            f" ON CONFLICT DO UPDATE SET {update_set}")
     conn.executemany(sql, [tuple(r[c] for c in cols) for r in rows])
@@ -255,9 +378,24 @@ def main():
     conn.commit()
     print(f"{n} строк")
 
+    demo_start, demo_end = get_date_range(conn, "ads_demographics")
+    print("Демография (возраст/пол)...", end=" ", flush=True)
+    demo = fetch_demographics(client, demo_start, demo_end)
+    n = upsert(conn, "ads_demographics", demo)
+    conn.commit()
+    print(f"{n} строк")
+
+    asset_start, asset_end = get_date_range(conn, "ads_creative_assets")
+    print("RSA-ассеты (заголовки/описания)...", end=" ", flush=True)
+    assets = fetch_creative_assets(client, asset_start, asset_end)
+    n = upsert(conn, "ads_creative_assets", assets)
+    conn.commit()
+    print(f"{n} строк")
+
     # Сводка
     print("\n=== ЗАГРУЖЕНО ===")
-    for tbl in ("ads_campaigns", "ads_keywords", "ads_search_terms"):
+    for tbl in ("ads_campaigns", "ads_keywords", "ads_search_terms",
+                "ads_demographics", "ads_creative_assets"):
         row = conn.execute(f"SELECT COUNT(*), MIN(date), MAX(date) FROM {tbl}").fetchone()
         print(f"  {tbl:<22} {row[0]:>7} строк | {row[1]} → {row[2]}")
 
