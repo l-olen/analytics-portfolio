@@ -13,11 +13,9 @@
   python dashboards/anonymize_csv.py
   python dashboards/upload_to_sheets.py
 
-Создаёт (или обновляет) две таблицы:
-  "Education Center — Dashboard Data"
-  "Medical Center — Dashboard Data"
+Создаёт (или обновляет) таблицу "Medical Center — Dashboard Data".
 
-Ссылки на таблицы выводятся в конце.
+Ссылка на таблицу выводится в конце.
 """
 
 import csv
@@ -110,21 +108,6 @@ def main():
     creds = load_credentials()
     gc = gspread.authorize(creds)
 
-    # ── EDUCATION CENTER ──────────────────────────────────────
-    education_files = [
-        ("channel_funnel",   CSV_DIR / "education_channel_funnel.csv"),
-        ("monthly_trend",    CSV_DIR / "education_monthly_trend.csv"),
-        ("channel_monthly",  CSV_DIR / "education_channel_monthly.csv"),
-        ("ads_campaigns",    CSV_DIR / "education_ads_campaigns.csv"),
-        ("ads_monthly",      CSV_DIR / "education_ads_monthly.csv"),
-        ("audience",         CSV_DIR / "education_audience.csv"),
-        ("creative_themes",  CSV_DIR / "education_creative_themes.csv"),
-    ]
-
-    url_education = upload_group(gc,
-        "Education Center — Dashboard Data",
-        education_files)
-
     # ── MEDICAL CENTER ─────────────────────────────────────────
     medical_files = [
         ("channel_funnel",   CSV_DIR / "medical_channel_funnel.csv"),
@@ -143,21 +126,13 @@ def main():
     print("\n" + "="*60)
     print("ДАННЫЕ ЗАГРУЖЕНЫ")
     print("="*60)
-    print(f"\nEducation Center Sheets: {url_education}")
-    print(f"Medical Center Sheets: {url_medical}")
+    print(f"\nMedical Center Sheets: {url_medical}")
     print("""
 Следующий шаг — Looker Studio:
   1. Откройте lookerstudio.google.com
   2. Создать > Отчёт > Добавить данные > Google Sheets
-  3. Выберите "Education Center — Dashboard Data" → вкладку channel_funnel
+  3. Выберите "Medical Center — Dashboard Data" → вкладку channel_funnel
   4. Создайте страницу с нужными чартами (см. структуру ниже)
-  5. Повторите для Medical Center
-
-Структура дашборда Education Center:
-  Стр.1 "Воронка": Таблица channel_funnel + Pie Chart contacts по channel
-  Стр.2 "Тренд": Line chart monthly_trend (contacts + won по месяцам)
-  Стр.3 "Google Ads": Таблица ads_campaigns (spend/leads/CPL/CPA)
-  Стр.4 "Каналы×Месяц": Heatmap из channel_monthly
 
 Структура дашборда Medical Center:
   Стр.1 "Воронка": Таблица channel_funnel (source → qualified → appt)

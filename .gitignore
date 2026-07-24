@@ -20,19 +20,28 @@ fact_check_*.txt
 debug_*.txt
 weekly_events_log.md
 
-# clinic-marketing-analytics: real (non-anonymized) data and credentials
-clinic-marketing-analytics/data/
-clinic-marketing-analytics/dashboards/csv/
-clinic-marketing-analytics/etl/.env
+# medical-clinic-analytics: real (non-anonymized) data and credentials
+medical-clinic-analytics/data/
+medical-clinic-analytics/dashboards/csv/
+medical-clinic-analytics/etl/.env
 
-# clinic-marketing-analytics: private utilities not part of the portfolio
+# medical-clinic-analytics: private utilities not part of the portfolio
 # (contain live AmoCRM subdomain / export real, non-anonymized data)
-clinic-marketing-analytics/etl/explore_lead.py
-clinic-marketing-analytics/etl/explore_fields.py
-clinic-marketing-analytics/etl/explore_pipelines.py
-clinic-marketing-analytics/etl/reauth_amo.py
-clinic-marketing-analytics/dashboards/export_to_sheets.py
-clinic-marketing-analytics/dashboards/campaign_map_local.py
+medical-clinic-analytics/etl/explore_lead.py
+medical-clinic-analytics/etl/explore_fields.py
+medical-clinic-analytics/etl/explore_pipelines.py
+medical-clinic-analytics/etl/reauth_amo.py
+medical-clinic-analytics/dashboards/export_to_sheets.py
+
+# education-center-analytics: real (non-anonymized) data and credentials
+education-center-analytics/data/
+education-center-analytics/dashboards/csv/
+education-center-analytics/etl/.env
+
+# education-center-analytics: private utilities not part of the portfolio
+# (contain live AmoCRM subdomain / export real, non-anonymized data)
+education-center-analytics/dashboards/export_to_sheets.py
+education-center-analytics/dashboards/campaign_map_local.py
 
 # large binary files
 *.xlsx

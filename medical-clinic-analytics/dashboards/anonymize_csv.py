@@ -7,17 +7,12 @@ ratios (CR%, CTR, share%) intact.
     SPEND_FACTOR  = 12  → ad spend ×12
     VOLUME_FACTOR =  4  → leads, contacts, clicks ×4
 
-Requires dashboards/campaign_map_local.py (gitignored, not in this repo)
-for real→anonymized campaign name mapping.
-
 Output: dashboards/csv_demo/*.csv — ready for Power BI / Tableau.
 Usage:  python dashboards/anonymize_csv.py
 """
 
 import csv
 from pathlib import Path
-
-from campaign_map_local import anonymize_name
 
 SPEND_FACTOR  = 12
 VOLUME_FACTOR = 4
@@ -36,36 +31,6 @@ DEMO_DIR.mkdir(exist_ok=True)
 # "R:a/b"   → recalculate from already-scaled columns a and b
 
 RULES = {
-    "education_channel_funnel.csv": {
-        "contacts": "V", "won": "V", "lost": "V", "active": "V", "cr_pct": None,
-    },
-    "education_monthly_trend.csv": {
-        "contacts": "V", "won": "V", "cr_pct": None,
-        "ga_spend_usd": "S", "google_crm_leads": "V",
-        "cpl_google_usd": "R:ga_spend_usd/google_crm_leads",
-    },
-    "education_channel_monthly.csv": {
-        "contacts": "V", "won": "V",
-    },
-    "education_ads_campaigns.csv": {
-        "campaign_name": "NAME",
-        "spend_usd": "S", "clicks": "V", "impressions": "V",
-        "crm_leads": "V", "won": "V",
-        "cpl_usd": "R:spend_usd/crm_leads",
-        "cpa_usd": "R:spend_usd/won",
-    },
-    "education_ads_monthly.csv": {
-        "spend_usd": "S", "clicks": "V", "impressions": "V", "ga_conversions": "V",
-    },
-    "education_audience.csv": {
-        "impressions": "V", "clicks": "V", "ctr_pct": None,
-        "conversions": "V", "cvr_pct": None, "spend_usd": "S",
-    },
-    "education_creative_themes.csv": {
-        # headlines_n НЕ масштабируется — это количество реальных вариантов
-        # креатива, а не объёмная метрика; ×4 исказило бы масштаб тестирования
-        "impressions": "V", "clicks": "V", "ctr_pct": None,
-    },
     "medical_channel_funnel.csv": {
         "contacts": "V", "qualified": "V", "rejected": "V", "in_work": "V",
         "qual_pct": None, "got_appointment": "V", "appt_cr_pct": None,
@@ -141,9 +106,7 @@ def process(fname: str):
             val   = row[col]
             ocol  = COLUMN_RENAME.get(col, col)
 
-            if rule == "NAME":
-                scaled[ocol] = anonymize_name(val)
-            elif rule == "S":
+            if rule == "S":
                 scaled[ocol] = apply_factor(val, SPEND_FACTOR)
             elif rule == "V":
                 scaled[ocol] = apply_factor(val, VOLUME_FACTOR, is_int=True)
