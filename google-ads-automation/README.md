@@ -73,14 +73,6 @@ Scripts API limitation: auction insights and RSA asset pausing are not available
 
 ---
 
-## Screenshots
-
-![Scripts panel](screenshots/scripts_panel.png)
-![Dashboard — GA4 channels](screenshots/dashboard_channels.png)
-![Dashboard — CRM funnel](screenshots/dashboard_crm.png)
-
----
-
 ## Key Design Decisions
 
 **Why dry-run by default?** Changes to live ad accounts are irreversible in the short term. Every script prints a preview; `--apply` requires explicit intent.
