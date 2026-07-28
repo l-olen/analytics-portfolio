@@ -1,4 +1,4 @@
-# Выгружает лиды образовательного центра из AmoCRM → SQLite (education.db)
+# Pulls the education center's leads from AmoCRM into SQLite (education.db)
 
 import os
 import sqlite3
@@ -9,7 +9,7 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
-AMO_ENV_PATH = Path("C:/projects/my-project/google_ads/.env")
+AMO_ENV_PATH = Path(os.getenv("SHARED_ENV_PATH", Path(__file__).parent / ".env"))
 load_dotenv(AMO_ENV_PATH, override=True)
 
 DB_PATH     = Path(__file__).parent.parent / "data" / "education.db"
@@ -17,16 +17,16 @@ SCHEMA_PATH = Path(__file__).parent / "schema_education.sql"
 
 AMO_SUBDOMAIN   = os.environ["EDUCATION_AMO_SUBDOMAIN"]
 AMO_BASE        = f"https://{AMO_SUBDOMAIN}.amocrm.ru"
-SKIP_PIPELINES  = set()   # грузим всё, бот-фильтрация через is_bot после загрузки
+SKIP_PIPELINES  = set()   # load everything, bot filtering happens via is_bot after load
 WON             = 142
 LOST            = 143
 
-# Теги, обозначающие источник
+# Tags that identify the lead source (matched against the CRM's own tag names)
 SITE_WEB_TAGS  = {"заказ с сайта", "сайт", "tilda"}
 SITE_QUIZ_TAGS = {"квиз", "сайт квиз"}
 CALL_TAGS      = {"555100400", "входящий", "пропущенный", os.environ["EDUCATION_CALL_TAG_EXTRA"]}
 
-# Маппинг кастомных полей AmoCRM → колонки БД
+# AmoCRM custom field ID → database column
 CF_MAP = {
     528579: "utm_source",
     528575: "utm_medium",
@@ -40,16 +40,16 @@ CF_MAP = {
     528587: "referrer",
     528599: "gclientid",
     534651: "crm_source",
-    539111: "mesto_ucheby",
-    893529: "klass_kurs",
-    1583291: "pervoe_obr",
-    1583293: "yazyk_obuch",
-    1603123: "produkt",
+    539111: "study_location",
+    893529: "grade_or_course",
+    1583291: "inquiry_type",
+    1583293: "instruction_language",
+    1603123: "product",
     1631669: "abc_category",
-    1638495: "reklama_kanal",
+    1638495: "ad_channel",
 }
 
-# Колонки в порядке INSERT (без lead_id и is_bot)
+# Columns in INSERT order (excluding lead_id and is_bot)
 CF_COLS = list(CF_MAP.values())
 
 
@@ -76,21 +76,21 @@ def _extract_cf(cf_list: list) -> dict:
 
 
 def _migrate_columns(conn):
-    """Добавляет новые колонки в существующую БД (безопасно при повторном запуске)."""
+    """Adds new columns to an existing database (safe to re-run)."""
     new_cols = [
         ("utm_source", "TEXT"), ("utm_medium", "TEXT"), ("utm_campaign", "TEXT"),
         ("utm_content", "TEXT"), ("utm_term", "TEXT"), ("gclid", "TEXT"),
         ("yclid", "TEXT"), ("fbclid", "TEXT"), ("roistat", "TEXT"), ("referrer", "TEXT"),
         ("gclientid", "TEXT"),
-        ("crm_source", "TEXT"), ("mesto_ucheby", "TEXT"), ("klass_kurs", "TEXT"),
-        ("pervoe_obr", "TEXT"), ("yazyk_obuch", "TEXT"), ("produkt", "TEXT"),
-        ("abc_category", "TEXT"), ("reklama_kanal", "TEXT"),
+        ("crm_source", "TEXT"), ("study_location", "TEXT"), ("grade_or_course", "TEXT"),
+        ("inquiry_type", "TEXT"), ("instruction_language", "TEXT"), ("product", "TEXT"),
+        ("abc_category", "TEXT"), ("ad_channel", "TEXT"),
     ]
     for col, typ in new_cols:
         try:
             conn.execute(f"ALTER TABLE crm_leads ADD COLUMN {col} {typ}")
         except sqlite3.OperationalError:
-            pass  # уже есть
+            pass  # already there
 
 
 def _refresh_token() -> str:
@@ -106,7 +106,7 @@ def _refresh_token() -> str:
     )
     data = resp.json()
     if "access_token" not in data:
-        raise RuntimeError(f"Не удалось обновить токен: {data}")
+        raise RuntimeError(f"Token refresh failed: {data}")
 
     text = AMO_ENV_PATH.read_text(encoding="utf-8")
     for key, val in [("AMO_ACCESS_TOKEN", data["access_token"]),
@@ -142,7 +142,7 @@ def fetch_leads(conn):
     token   = get_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Строим UPSERT: обновляем все поля КРОМЕ is_bot (не сбрасываем бот-разметку)
+    # Build the UPSERT: update every field EXCEPT is_bot (don't clear bot flags)
     base_cols = ["created_at", "created_date", "updated_at", "status", "source",
                  "tags", "price", "pipeline_id", "stage_id", "contact_id"]
     all_data_cols = base_cols + CF_COLS
@@ -155,7 +155,7 @@ def fetch_leads(conn):
         ON CONFLICT(lead_id) DO UPDATE SET {update_set}
     """
 
-    print("Загружаем всю историю (без фильтра по дате)...")
+    print("Loading full history (no date filter)...")
     total = 0
     page  = 1
 
@@ -216,13 +216,13 @@ def fetch_leads(conn):
 
         total += len(rows)
         if page % 10 == 0:
-            print(f"  Страница {page}: итого {total} лидов")
+            print(f"  Page {page}: {total} leads so far")
 
         if len(leads) < 250:
             break
         page += 1
 
-    print(f"\nИтого: {total} лидов загружено")
+    print(f"\nTotal: {total} leads loaded")
 
 
 def main():

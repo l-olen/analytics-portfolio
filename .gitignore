@@ -49,3 +49,11 @@ education-center-analytics/dashboards/campaign_map_local.py
 *.docx
 *.pdf
 *.png
+omt-bitumen-report/
+medical-clinic-analytics/dashboards/anonymize_csv.py
+medical-clinic-analytics/dashboards/upload_to_sheets.py
+medical-clinic-analytics/dashboards/get_sheets_token.py
+education-center-analytics/dashboards/anonymize_csv.py
+education-center-analytics/dashboards/upload_to_sheets.py
+education-center-analytics/dashboards/get_sheets_token.py
+education-center-analytics/dashboards/powerbi_education_guide.md

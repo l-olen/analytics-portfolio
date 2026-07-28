@@ -1,4 +1,4 @@
-# Выгружает данные GA4 образовательного центра → education.db
+# Pulls the education center's GA4 data into education.db
 
 from pathlib import Path
 from dotenv import load_dotenv
@@ -9,7 +9,7 @@ from google.oauth2.credentials import Credentials
 import os, sqlite3
 
 load_dotenv(Path(__file__).parent / ".env")
-load_dotenv(Path("C:/projects/my-project/google_ads/.env"), override=True)
+load_dotenv(Path(os.getenv("SHARED_ENV_PATH", Path(__file__).parent / ".env")), override=True)
 
 DB_PATH     = Path(__file__).parent.parent / "data" / "education.db"
 PROPERTY_ID = "428073715"   # GA4 property
@@ -67,7 +67,7 @@ def fetch_sessions(conn):
         VALUES (?,?,?,?,?,?,?)
     """, rows)
     conn.commit()
-    print(f"  Загружено строк: {len(rows)}")
+    print(f"  Rows loaded: {len(rows)}")
 
 
 def fetch_events(conn):
@@ -104,17 +104,17 @@ def fetch_events(conn):
         VALUES (?,?,?,?)
     """, rows)
     conn.commit()
-    print(f"  Загружено строк: {len(rows)}")
+    print(f"  Rows loaded: {len(rows)}")
 
 
 def main():
     conn = sqlite3.connect(DB_PATH)
-    print("GA4: тяну сессии...")
+    print("GA4: fetching sessions...")
     fetch_sessions(conn)
-    print("GA4: тяну события...")
+    print("GA4: fetching events...")
     fetch_events(conn)
     conn.close()
-    print("\nГотово.")
+    print("\nDone.")
 
 
 if __name__ == "__main__":

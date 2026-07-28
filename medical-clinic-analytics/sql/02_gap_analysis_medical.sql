@@ -1,8 +1,8 @@
--- Gap Analysis: GA4 (платный трафик) vs CRM (лиды)
--- Цель: найти где и почему теряются данные между рекламными системами и CRM
+-- Gap Analysis: GA4 (paid traffic) vs CRM (leads)
+-- Goal: find where and why data diverges between the ad platforms and the CRM
 
 -- ─────────────────────────────────────────────
--- 1. Сессии и конверсии по каналам (GA4)
+-- 1. Sessions and conversions by channel (GA4)
 -- ─────────────────────────────────────────────
 SELECT
     channel,
@@ -13,20 +13,20 @@ GROUP BY channel
 ORDER BY sessions_total DESC;
 
 /*
-РЕЗУЛЬТАТ:
+RESULT:
 Cross-network    48808    4027   ← PMax (utm_campaign=km_max|...)
 Organic Search   22001     302
-Paid Search      14660    1497   ← обычный поиск (utm_medium=cpc)
+Paid Search      14660    1497   ← standard search (utm_medium=cpc)
 Direct            7048     270
 Organic Social    3267      23
 Display            702       9
 
-Платный трафик суммарно: ~63k сессий, ~5.5k "конверсий" в GA4.
-NB: "конверсии" в GA4 = все key events вместе (формы + клики по номеру).
+Paid traffic total: ~63k sessions, ~5.5k GA4 "conversions".
+NB: GA4 "conversions" here = all key events combined (forms + phone-number clicks).
 */
 
 -- ─────────────────────────────────────────────
--- 2. Конверсионные события с разбивкой paid/total
+-- 2. Conversion events, paid vs total breakdown
 -- ─────────────────────────────────────────────
 SELECT
     event_label,
@@ -43,23 +43,24 @@ WHERE event_label IN (
 GROUP BY event_label;
 
 /*
-РЕЗУЛЬТАТ:
-click_number                   5075    4610  ← главная конверсия клиники
-form_call_submit                353     315  ← основная форма (старый сайт)
-form_appointment_side_submit     20      20  ← боковая форма (была на обоих сайтах)
+RESULT:
+click_number                   5075    4610  ← the clinic's main conversion
+form_call_submit                353     315  ← primary form (old site)
+form_appointment_side_submit     20      20  ← side form (present on both sites)
 form_submit                      16      16
 click_instagram                   7       7
 
-Формы итого (paid): 315 + 20 + 16 = 351
-Звонки (paid): 4610 → в 13x больше чем форм.
-Клиника конвертирует через звонок, а не через форму.
+Forms total (paid): 315 + 20 + 16 = 351
+Calls (paid): 4610 → roughly 13x more than forms.
+The clinic converts through the phone, not the form.
 
-NB по июню: после запуска нового сайта 23.06 GA4 зафиксировал 25 form_appointment_side_submit,
-в CRM осталось 12 заявок — остальные удалены как тестовые. Расхождение объяснено, не баг.
+June note: after the new site launched on 06-23, GA4 recorded 25
+form_appointment_side_submit events, but only 12 leads remained in CRM — the
+rest were removed as test submissions. The gap is explained, not a bug.
 */
 
 -- ─────────────────────────────────────────────
--- 3. GA4 paid forms vs CRM site_paid по месяцам
+-- 3. GA4 paid forms vs CRM site_paid, by month
 -- ─────────────────────────────────────────────
 SELECT
     month,
@@ -86,27 +87,28 @@ GROUP BY month
 ORDER BY month;
 
 /*
-РЕЗУЛЬТАТ:
-2025-07      6      0   ← форма на сайте была, но в CRM не попадало
+RESULT:
+2025-07      6      0   ← the site form existed but wasn't reaching CRM
 2025-08      4      0
 2025-09      2      0
 2025-10      7      0
 2025-11      3      1
-2025-12      8      8   ← интеграция заработала
-2026-01     99     24   ← GA4 видит в 4x больше чем CRM
+2025-12      8      8   ← the integration starts working
+2026-01     99     24   ← GA4 sees 4x more than CRM
 2026-02     32     37
 2026-03     10     22
-2026-04      0     25   ← событие переименовано на новом сайте
+2026-04      0     25   ← the event was renamed on the new site
 2026-05     25     64
-2026-06    119    322   ← запуск нового сайта 23.06 + смена event name
+2026-06    119    322   ← new site launched 06-23 + event name change
 
-Ключевое: форма на новом сайте называется иначе (form_appointment_side_submit
-вместо form_call_submit), поэтому июньские данные несопоставимы с ранними.
+Key point: the new site's form fires under a different event name
+(form_appointment_side_submit instead of form_call_submit), so June's
+figures aren't directly comparable to earlier months.
 */
 
 -- ─────────────────────────────────────────────
--- 4. Реальный бизнес-результат по источникам
---    (только воронка Назначение/приём = факт визита)
+-- 4. Real business outcome by source
+--    (only the Appointment pipeline = an actual visit)
 -- ─────────────────────────────────────────────
 SELECT
     source,
@@ -120,18 +122,18 @@ GROUP BY source
 ORDER BY leads DESC;
 
 /*
-РЕЗУЛЬТАТ:
-other        1527    1500    98.2  ← соцсети, мессенджеры, реферальные
-call          991     971    98.0  ← звонки (без атрибуции к платному)
+RESULT:
+other        1527    1500    98.2  ← social, messengers, referrals
+call          991     971    98.0  ← calls (no attribution to paid)
 site_organic   72      70    97.2
-site_paid      16      16   100.0  ← из 510 site_paid лидов только 16 дошли до приёма
+site_paid      16      16   100.0  ← only 16 of 510 site_paid leads made it here
 
-Платный трафик: 510 лидов в CRM, но до реального приёма доходят только 16 (3.1%).
-Остальные 494 оседают в воронке "База" без дальнейшего движения.
+Paid traffic: 510 leads in CRM, but only 16 (3.1%) make it to an actual
+appointment. The other 494 stall in the "Base" pipeline with no further movement.
 */
 
 -- ─────────────────────────────────────────────
--- 5. Дубли в site_paid лидах
+-- 5. Duplicates among site_paid leads
 -- ─────────────────────────────────────────────
 SELECT
     COUNT(*) AS contacts_with_duplicates
@@ -145,25 +147,26 @@ FROM (
 );
 
 /*
-РЕЗУЛЬТАТ: 15 контактов с двумя лидами → 15 лишних записей.
+RESULT: 15 contacts with two leads → 15 extra records.
 
-Итоговый gap:
-  CRM site_paid:       510
-  минус дубли:         -15
-  Уникальных лидов:    495
-  GA4 paid forms:      351
-  Разница:             144
+Overall gap:
+  CRM site_paid:        510
+  minus duplicates:      -15
+  Unique leads:          495
+  GA4 paid forms:        351
+  Difference:            144
 
-Объяснение 144: разная логика атрибуции.
-CRM берёт UTM из URL напрямую (всегда есть если клик был из рекламы).
-GA4 атрибутирует сессию через куки — блокируется адблокерами,
-сбрасывается при переходах. Поэтому CRM точнее для атрибуции конкретного лида,
-GA4 точнее для анализа поведения на сайте.
+Explaining the 144: it's a difference in attribution logic.
+CRM reads the UTM tag straight from the URL (always present if the click
+came from an ad). GA4 attributes the session via a cookie, which ad blockers
+strip and which resets across navigations. So CRM is more accurate for
+attributing an individual lead, while GA4 is more accurate for analyzing
+on-site behavior.
 */
 
 -- ─────────────────────────────────────────────
--- 6. Реальная end-to-end воронка по источнику входа
---    База → Назначение/приём (через contact_id)
+-- 6. Real end-to-end funnel by entry source
+--    Base → Appointment (via contact_id)
 -- ─────────────────────────────────────────────
 SELECT
     b.source                                              AS entry_source,
@@ -184,26 +187,27 @@ GROUP BY b.source
 ORDER BY contacts_in_base DESC;
 
 /*
-РЕЗУЛЬТАТ:
+RESULT:
 other        9697    1046    10.8
 call         4091     664    16.2
 site_organic 1133      62     5.5
-site_paid     117      11     9.4  ← 117 уникальных контактов, не 510 лидов
+site_paid     117      11     9.4  ← 117 unique contacts, not 510 leads
 
-Настоящий end-to-end CR: из всех кто попал в Базу по источнику — сколько
-дошли до реального приёма. Call (16.2%) > site_paid (9.4%) > other (10.8%) > organic (5.5%).
+The real end-to-end CR: of everyone who entered Base by source, how many
+made it to an actual appointment. call (16.2%) > site_paid (9.4%) >
+other (10.8%) > organic (5.5%).
 
-ВАЖНО: site_paid = нижняя граница. Часть платных контактов у которых UTM
-не попал в CRM (78% случаев) классифицированы как "other". Реальный CR
-из платного трафика выше 9.4% но точно измерить невозможно без исправления
-интеграции форма→CRM.
+NB: site_paid is a floor. Some paid contacts whose UTM never reached CRM
+(78% of cases) are classified as "other" instead. The real CR from paid
+traffic is higher than 9.4%, but can't be measured precisely until the
+form→CRM integration is fixed.
 */
 
 -- ─────────────────────────────────────────────
--- 7. Касание/Квалификация → Назначение (через contact_id)
+-- 7. Touch/Qualification → Appointment (via contact_id)
 -- ─────────────────────────────────────────────
 SELECT
-    COUNT(DISTINCT k.contact_id)  AS contacts_in_kachestvo,
+    COUNT(DISTINCT k.contact_id)  AS contacts_in_touch,
     COUNT(DISTINCT a.contact_id)  AS got_appointment,
     ROUND(100.0 * COUNT(DISTINCT a.contact_id)
           / COUNT(DISTINCT k.contact_id), 1) AS conv_pct
@@ -215,11 +219,11 @@ LEFT JOIN (
 WHERE k.pipeline_id = 7844402
   AND k.contact_id IS NOT NULL;
 
--- РЕЗУЛЬТАТ: 6554 → 728 → 11.1% (сопоставимо с другими источниками в Базе)
+-- RESULT: 6554 → 728 → 11.1% (comparable to other sources within Base)
 
--- Пересечение: сколько контактов Касания также были в Базе
+-- Overlap: how many Touch contacts were also ever in Base
 SELECT
-    COUNT(DISTINCT k.contact_id)                              AS in_kachestvo,
+    COUNT(DISTINCT k.contact_id)                              AS in_touch,
     COUNT(DISTINCT b.contact_id)                              AS also_in_base,
     ROUND(100.0 * COUNT(DISTINCT b.contact_id)
           / COUNT(DISTINCT k.contact_id), 1)                  AS overlap_pct
@@ -232,69 +236,69 @@ WHERE k.pipeline_id = 7844402
   AND k.contact_id IS NOT NULL;
 
 /*
-РЕЗУЛЬТАТ: 6554 → 1035 → 15.8% пересечение с Базой.
-84% контактов в Касании — отдельные люди, никогда не бывшие в Базе.
-Касание = самостоятельный входной поток, не продолжение Базы.
-15.8% пересечения — скорее всего ручное дублирование менеджерами.
+RESULT: 6554 → 1035 → 15.8% overlap with Base.
+84% of Touch contacts are separate people who were never in Base.
+Touch is an independent entry stream, not a continuation of Base.
+The 15.8% overlap is most likely manual duplication by staff.
 */
 
 -- ─────────────────────────────────────────────
--- 8. Полная воронка: все пути контакта к приёму
+-- 8. Full funnel: every path a contact can take to an appointment
 -- ─────────────────────────────────────────────
 WITH
 in_base AS (SELECT DISTINCT contact_id FROM crm_leads WHERE pipeline_id = 10176374),
-in_kach AS (SELECT DISTINCT contact_id FROM crm_leads WHERE pipeline_id = 7844402),
+in_touch AS (SELECT DISTINCT contact_id FROM crm_leads WHERE pipeline_id = 7844402),
 in_appt AS (SELECT DISTINCT contact_id FROM crm_leads
              WHERE pipeline_id = 10176362 AND status = 'won'),
 all_contacts AS (
     SELECT contact_id FROM in_base
-    UNION SELECT contact_id FROM in_kach
+    UNION SELECT contact_id FROM in_touch
 )
 SELECT
     CASE
         WHEN b.contact_id IS NOT NULL AND k.contact_id IS NOT NULL AND a.contact_id IS NOT NULL
-            THEN 'База + Касание → Приём'
+            THEN 'Base + Touch → Appointment'
         WHEN b.contact_id IS NOT NULL AND k.contact_id IS NULL  AND a.contact_id IS NOT NULL
-            THEN 'База → Приём'
+            THEN 'Base → Appointment'
         WHEN b.contact_id IS NULL  AND k.contact_id IS NOT NULL AND a.contact_id IS NOT NULL
-            THEN 'Касание → Приём'
+            THEN 'Touch → Appointment'
         WHEN b.contact_id IS NOT NULL AND k.contact_id IS NOT NULL AND a.contact_id IS NULL
-            THEN 'База + Касание (без приёма)'
+            THEN 'Base + Touch (no appointment)'
         WHEN b.contact_id IS NOT NULL AND k.contact_id IS NULL  AND a.contact_id IS NULL
-            THEN 'Только База'
-        ELSE 'Только Касание'
+            THEN 'Base only'
+        ELSE 'Touch only'
     END                            AS journey,
     COUNT(*)                       AS contacts
 FROM all_contacts c
 LEFT JOIN in_base b ON c.contact_id = b.contact_id
-LEFT JOIN in_kach k ON c.contact_id = k.contact_id
+LEFT JOIN in_touch k ON c.contact_id = k.contact_id
 LEFT JOIN in_appt a ON c.contact_id = a.contact_id
 GROUP BY journey
 ORDER BY contacts DESC;
 
 /*
-РЕЗУЛЬТАТ:
-Только База              12720  62%  ← не двигаются дальше
-Только Касание            5396  26%  ← не двигаются дальше
-База → Приём              1113   5%  ← прямой путь, минуя Касание
-База + Касание → Приём     604   3%  ← прошли оба этапа
-База + Касание (без)       431   2%  ← прошли оба, но не дошли
-Касание → Приём            124   1%  ← сразу в приём из Касания
+RESULT:
+Base only                12720  62%  ← never move further
+Touch only                5396  26%  ← never move further
+Base → Appointment        1113   5%  ← direct path, bypassing Touch
+Base + Touch → Appt        604   3%  ← went through both stages
+Base + Touch (no appt)     431   2%  ← went through both, didn't convert
+Touch → Appointment         124   1%  ← straight to appointment from Touch
 
-Итого контактов:  20,388
-Итого с приёмом:   1,841  (9%)
+Total contacts:   20,388
+Total with appt:   1,841  (9%)
 
-ВЫВОДЫ:
-1. 88% контактов не доходят до приёма — оседают в Базе или Касании
-2. Два пути к приёму: База→Приём (1113) и через Касание (728 = 604+124)
-3. Касание работает как квалификатор: CR 11.1% vs ~8% напрямую из Базы
-4. Горячий сегмент потерь: 431 контакт прошли оба этапа, но не дошли до приёма
-   — это люди с высоким вовлечением, стоит анализировать отдельно
-5. Реальный end-to-end CR всей воронки: 9% от всех вошедших контактов
+TAKEAWAYS:
+1. 88% of contacts never reach an appointment — they stall in Base or Touch
+2. Two paths to an appointment: Base→Appt (1113) and via Touch (728 = 604+124)
+3. Touch works as a qualifier: 11.1% CR vs ~8% going directly from Base
+4. A "hot loss" segment: 431 contacts went through both stages but didn't
+   convert — these are highly engaged people worth analyzing separately
+5. The real end-to-end CR of the whole funnel: 9% of all contacts who entered
 */
 
 -- ─────────────────────────────────────────────
--- 9. Смена логики воронок: когда База перестала быть точкой входа
+-- 9. When the funnel logic changed: Base stops being the entry point
 -- ─────────────────────────────────────────────
 WITH first_lead AS (
     SELECT contact_id, pipeline_id AS first_pipeline,
@@ -306,7 +310,7 @@ WITH first_lead AS (
 SELECT
     strftime('%Y-%m', first_date)                              AS month,
     SUM(CASE WHEN first_pipeline = 10176374 THEN 1 END)       AS entered_base,
-    SUM(CASE WHEN first_pipeline = 7844402  THEN 1 END)       AS entered_kach,
+    SUM(CASE WHEN first_pipeline = 7844402  THEN 1 END)       AS entered_touch,
     SUM(CASE WHEN first_pipeline NOT IN (10176374, 7844402)
              THEN 1 END)                                       AS other
 FROM first_lead
@@ -314,39 +318,39 @@ GROUP BY month
 ORDER BY month;
 
 /*
-РЕЗУЛЬТАТ (первый лид контакта по воронке):
-2025-07    859     3    84   ← почти всё через Базу
+RESULT (a contact's first lead, by pipeline):
+2025-07    859     3    84   ← almost everything through Base
 2025-08   2574     8    38
 2025-09   1748     8    75
-2025-10   2028  1163   142   ← ПЕРЕХОД: Касание запущено в октябре
+2025-10   2028  1163   142   ← TRANSITION: Touch launched in October
 2025-11    779   429   387
 2025-12    885   205   245
-2026-01    558   693   315   ← Касание обгоняет Базу
+2026-01    558   693   315   ← Touch overtakes Base
 2026-02    553   590   206
 2026-03    546   572   259
 ...
 
-АРХИТЕКТУРА ВОРОНОК (выяснили из настроек AmoCRM):
+FUNNEL ARCHITECTURE (reconstructed from the AmoCRM pipeline settings):
 
-Старая система (до окт 2025):
-  Новый лид → База (Неразобранное включено) → квалификация → Назначение/Приём
+Old system (before Oct 2025):
+  New lead → Base (unsorted included) → qualification → Appointment
 
-Новая система (с окт 2025):
-  Новый лид → Касание/Квалификация (Неразобранное включено, База выключено)
-      ↓ квалифицирован      ↓ закрыт (7 причин)    ↓ закрыт (3 причины)
-  Встреча назначена       База "Отказ/игнор"       База "Не квал лиды"
+New system (from Oct 2025):
+  New lead → Touch/Qualification (unsorted included, Base excluded)
+      ↓ qualified            ↓ closed (7 reasons)     ↓ closed (3 reasons)
+  Meeting booked          Base "Rejected/ignored"    Base "Unqualified"
 
-База сейчас = архив отклонённых + старые лиды до октября 2025.
-Неразобранное в Базе — ВЫКЛЮЧЕНО с момента перехода на новую систему.
+Base today = an archive of rejected leads + leads from before October 2025.
+"Unsorted" in Base has been switched off since the migration to the new system.
 
-Источники в Касании: Telegram, Instagram (мессенджер + комментарии),
-Facebook, CRM Plugin сайта, Google Таблица.
-Источник поля "Источник" — заполняется менеджерами вручную (ненадёжно).
-Автотеггинг Instagram/Telegram требует виджета "Калькулятор полей" или API.
+Sources feeding Touch: Telegram, Instagram (DMs + comments), Facebook, a site
+CRM plugin widget, a Google Sheet. The "Source" field is filled in manually
+by staff (unreliable). Automatic Instagram/Telegram tagging would need a
+dedicated widget or API integration.
 */
 
 -- ─────────────────────────────────────────────
--- 10. Воронка по эрам: старая система vs новая
+-- 10. Funnel by era: old system vs new
 -- ─────────────────────────────────────────────
 WITH
 first_lead AS (
@@ -363,12 +367,12 @@ got_appt AS (
 SELECT
     CASE
         WHEN fl.first_pipeline = 10176374 AND fl.first_date < '2025-10-01'
-            THEN '1. Старая система: вход через Базу'
+            THEN '1. Old system: entered via Base'
         WHEN fl.first_pipeline = 7844402
-            THEN '2. Новая система: вход через Касание'
+            THEN '2. New system: entered via Touch'
         WHEN fl.first_pipeline = 10176374 AND fl.first_date >= '2025-10-01'
-            THEN '3. База после окт (отклонённые из Касания)'
-        ELSE '4. Прямая запись (Назначение/Повторные)'
+            THEN '3. Base after Oct (rejected from Touch)'
+        ELSE '4. Direct entry (Appointment/Repeat pipelines)'
     END                              AS segment,
     COUNT(*)                         AS contacts,
     COUNT(ga.contact_id)             AS got_appointment,
@@ -379,46 +383,49 @@ GROUP BY segment
 ORDER BY segment;
 
 /*
-РЕЗУЛЬТАТ:
-1. Старая система (База до окт):    5195 → 76  → 1.5% CR
-2. Новая система (Касание):         6273 → 574 → 9.2% CR  ← рабочий бенчмарк
-3. База после окт (отклонённые):    7717 → 68  → 0.9% CR  ← подтверждено: корзина
-4. Прямая запись:                   2252 → 1297 → 57.6%   ← артефакт: вошли сразу в Назначение
+RESULT:
+1. Old system (Base before Oct):    5195 → 76  → 1.5% CR
+2. New system (Touch):              6273 → 574 → 9.2% CR  ← working benchmark
+3. Base after Oct (rejected):       7717 → 68  → 0.9% CR  ← confirmed: a reject bin
+4. Direct entry:                    2252 → 1297 → 57.6%   ← artifact: entered straight into Appointment
 
-ВЫВОДЫ:
-- Новая система (Касание) работает в 6x лучше старой: 9.2% vs 1.5%
-- 7,717 отклонённых > 6,273 активных — высокий % неквала, норма для клиники
-- "Прямая запись" (57.6%) — не конверсия воронки, а менеджер сразу создал лид в Назначении
-- Данные за год несопоставимы напрямую: октябрь 2025 = точка разрыва в логике
+TAKEAWAYS:
+- The new system (Touch) performs 6x better than the old one: 9.2% vs 1.5%
+- 7,717 rejected contacts vs 6,273 active ones — a high unqualified rate,
+  which is normal for this clinic
+- "Direct entry" (57.6%) isn't a real funnel conversion — a staff member
+  created the lead straight in the Appointment pipeline
+- The full year of data isn't directly comparable: October 2025 is a break
+  point in the underlying logic
 */
 
 -- ─────────────────────────────────────────────
--- ИТОГОВАЯ ИСТОРИЯ (для портфолио и интервью)
+-- SUMMARY (for the portfolio write-up and interviews)
 -- ─────────────────────────────────────────────
 /*
-ГЛАВНЫЙ ВОПРОС: какой ROI у платного трафика клиники?
-ЧЕСТНЫЙ ОТВЕТ: измерить точно нельзя — три системных gap:
+THE CENTRAL QUESTION: what is the ROI of the clinic's paid traffic?
+THE HONEST ANSWER: it can't be measured precisely — three structural gaps:
 
-1. ЗВОНКИ (главный канал): 4,610 paid кликов по номеру в GA4
-   → атрибуция к кампании невозможна без call tracking
-   → владелец пока не готов к call tracking
+1. CALLS (the main channel): 4,610 paid phone-number clicks in GA4
+   → can't attribute to a campaign without call tracking
+   → the owner isn't ready to invest in call tracking yet
 
-2. ФОРМЫ: UTM форма→CRM работала нестабильно весь год
-   → починено 30.06.2026 на новом сайте
-   → исторические данные не восстановить
+2. FORMS: the form→CRM UTM integration was unreliable for most of the year
+   → fixed on 2026-06-30 with the new site
+   → historical data can't be recovered
 
-3. СОЦСЕТИ (Instagram/Telegram): нет автоматической разметки
-   → поле "Источник" заполняется менеджерами вручную
-   → автотеггинг требует доп. настройки (виджет или API)
+3. SOCIAL (Instagram/Telegram): no automatic tagging
+   → the "Source" field is filled in manually by staff
+   → automatic tagging needs extra setup (a widget or API integration)
 
-ЧТО МОЖЕМ ИЗМЕРИТЬ:
-- Новая система (Касание, окт 2025+): 9.2% CR — рабочий бенчмарк
-- Отклонения: 7,717 из ~14k вошедших = ~55% не квалифицируются
-- Платный трафик: 510 site_paid лидов, 11 дошли до приёма (нижняя граница)
-- Главный канал конверсии — звонок, но он "чёрный ящик"
+WHAT CAN BE MEASURED:
+- The new system (Touch, Oct 2025+): 9.2% CR — a working benchmark
+- Rejections: 7,717 of ~14k entrants (~55%) don't qualify
+- Paid traffic: 510 site_paid leads, 11 made it to an appointment (a floor)
+- The main conversion channel is the phone call, but it's a black box
 
-РЕКОМЕНДАЦИИ (приоритет):
-1. Call tracking — разблокирует 90% attribution
-2. UTM→CRM интеграция — починена, нужно мониторить
-3. Автотеггинг соцсетей — виджет "Калькулятор полей" или прогер
+RECOMMENDATIONS (in priority order):
+1. Call tracking — would unlock attribution for 90% of conversions
+2. UTM→CRM integration — already fixed, needs monitoring
+3. Automatic social tagging — a dedicated widget, or a developer ticket
 */

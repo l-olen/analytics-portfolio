@@ -1,5 +1,4 @@
--- Схема базы данных: medical.db
--- Создаётся один раз: python -c "import sqlite3; ..."
+-- Database schema: medical.db
 
 CREATE TABLE IF NOT EXISTS crm_leads (
     lead_id         INTEGER PRIMARY KEY,
@@ -8,7 +7,7 @@ CREATE TABLE IF NOT EXISTS crm_leads (
     source          TEXT,                -- site_paid / site_organic / call / other
     price           REAL DEFAULT 0,
     pipeline_id     INTEGER,
-    contact_id      INTEGER,             -- связь с контактом (человеком) для трекинга пути
+    contact_id      INTEGER,             -- links to the underlying contact, for path tracing
     updated_at      TEXT
 );
 
@@ -25,7 +24,7 @@ CREATE TABLE IF NOT EXISTS ga4_sessions (
 
 CREATE TABLE IF NOT EXISTS ga4_events (
     date            TEXT NOT NULL,
-    event_label     TEXT NOT NULL,       -- "Отправка форм", "Клики по номеру"
+    event_label     TEXT NOT NULL,       -- "form_submit", "click_number", ...
     total           INTEGER DEFAULT 0,
     paid            INTEGER DEFAULT 0,
     PRIMARY KEY (date, event_label)
@@ -39,7 +38,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     clicks          INTEGER DEFAULT 0,
     cost_usd        REAL DEFAULT 0,
     conversions     REAL DEFAULT 0,
-    conv_action     TEXT,                -- название конкретной конверсии
+    conv_action     TEXT,                -- name of the specific conversion action
     PRIMARY KEY (date, campaign_id, conv_action)
 );
 
@@ -50,6 +49,6 @@ CREATE TABLE IF NOT EXISTS events_log (
     PRIMARY KEY (event_date, event_type)
 );
 
--- Ключевые события (вставляем сразу)
+-- Key events (seeded on creation)
 INSERT OR IGNORE INTO events_log VALUES
-    ('2026-06-23', 'site_launch', 'Запуск нового сайта');
+    ('2026-06-23', 'site_launch', 'New site launched');

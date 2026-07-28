@@ -1,12 +1,12 @@
 """
 ETL: Google Ads → education_ads.db
-Аккаунт образовательного центра, период: доступная история.
-Таблицы:
-  ads_campaigns      — daily performance по кампаниям
-  ads_keywords       — daily performance по ключевым словам (только Search)
-  ads_search_terms   — поисковые запросы (последние 90 дней, Google Ads limit)
-  ads_demographics   — daily performance по возрасту и полу (агрегат по кампании)
-  ads_creative_assets — daily performance по RSA-ассетам (заголовки/описания)
+Education center account, full available history.
+Tables:
+  ads_campaigns      — daily performance by campaign
+  ads_keywords       — daily performance by keyword (Search only)
+  ads_search_terms   — search terms (last 90 days, a Google Ads API limit)
+  ads_demographics   — daily performance by age and gender (aggregated to campaign level)
+  ads_creative_assets — daily performance by RSA asset (headlines/descriptions)
 """
 
 import os, sys, sqlite3
@@ -15,17 +15,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 sys.stdout.reconfigure(encoding="utf-8")
-load_dotenv(Path("C:/projects/my-project/google_ads/.env"), override=True)
+load_dotenv(Path(os.getenv("SHARED_ENV_PATH", Path(__file__).parent / ".env")), override=True)
 
-sys.path.insert(0, str(Path("C:/projects/my-project")))
 from google.ads.googleads.client import GoogleAdsClient
 
 # ============================================================
 CUSTOMER_ID = "6355895321"
 DB_PATH = Path(__file__).parent.parent / "data" / "education_ads.db"
-# Сколько дней истории тянуть при первом запуске
-INITIAL_DAYS = 540   # ~18 месяцев
-# При повторных — перекрываем последние N дней (обновляются с задержкой)
+# How many days of history to pull on the first run
+INITIAL_DAYS = 540   # ~18 months
+# On subsequent runs, re-fetch the last N days (they update with a delay)
 REFRESH_DAYS = 7
 # ============================================================
 
@@ -88,7 +87,7 @@ def init_db(conn: sqlite3.Connection):
             date            TEXT NOT NULL,
             campaign_id     INTEGER NOT NULL,
             dimension       TEXT NOT NULL,   -- 'age_range' | 'gender'
-            segment_value   TEXT NOT NULL,   -- напр. AGE_RANGE_18_24, FEMALE
+            segment_value   TEXT NOT NULL,   -- e.g. AGE_RANGE_18_24, FEMALE
             impressions     INTEGER DEFAULT 0,
             clicks          INTEGER DEFAULT 0,
             cost_micros     INTEGER DEFAULT 0,
@@ -200,7 +199,7 @@ def fetch_keywords(client, start_date: str, end_date: str) -> list[dict]:
 
 
 def fetch_search_terms(client, start_date: str, end_date: str) -> list[dict]:
-    # Google Ads хранит search terms только ~90 дней
+    # Google Ads only retains search terms for ~90 days
     cutoff = (date.today() - timedelta(days=89)).isoformat()
     start_date = max(start_date, cutoff)
 
@@ -241,7 +240,7 @@ def fetch_search_terms(client, start_date: str, end_date: str) -> list[dict]:
 
 
 def fetch_demographics(client, start_date: str, end_date: str) -> list[dict]:
-    """Возраст и пол — агрегируем по кампании (сырые view — на уровне ad group)."""
+    """Age and gender — aggregated to campaign level (the raw views are ad-group level)."""
     ga_service = client.get_service("GoogleAdsService")
     agg: dict = {}   # (date, campaign_id, dimension, segment_value) → [impr, clicks, cost, conv]
 
@@ -300,7 +299,7 @@ def fetch_demographics(client, start_date: str, end_date: str) -> list[dict]:
 
 
 def fetch_creative_assets(client, start_date: str, end_date: str) -> list[dict]:
-    """RSA-ассеты (заголовки/описания): текст + performance_label + impr/clicks."""
+    """RSA assets (headlines/descriptions): text + performance_label + impressions/clicks."""
     ga_service = client.get_service("GoogleAdsService")
     query = f"""
         SELECT
@@ -356,51 +355,51 @@ def main():
     init_db(conn)
 
     start_date, end_date = get_date_range(conn)
-    print(f"Период: {start_date} → {end_date}")
+    print(f"Period: {start_date} → {end_date}")
 
     client = get_client()
 
-    print("Кампании...", end=" ", flush=True)
+    print("Campaigns...", end=" ", flush=True)
     camps = fetch_campaigns(client, start_date, end_date)
     n = upsert(conn, "ads_campaigns", camps)
     conn.commit()
-    print(f"{n} строк")
+    print(f"{n} rows")
 
-    print("Ключевые слова...", end=" ", flush=True)
+    print("Keywords...", end=" ", flush=True)
     kws = fetch_keywords(client, start_date, end_date)
     n = upsert(conn, "ads_keywords", kws)
     conn.commit()
-    print(f"{n} строк")
+    print(f"{n} rows")
 
-    print("Поисковые запросы (≤90 дней)...", end=" ", flush=True)
+    print("Search terms (last 90 days)...", end=" ", flush=True)
     sts = fetch_search_terms(client, start_date, end_date)
     n = upsert(conn, "ads_search_terms", sts)
     conn.commit()
-    print(f"{n} строк")
+    print(f"{n} rows")
 
     demo_start, demo_end = get_date_range(conn, "ads_demographics")
-    print("Демография (возраст/пол)...", end=" ", flush=True)
+    print("Demographics (age/gender)...", end=" ", flush=True)
     demo = fetch_demographics(client, demo_start, demo_end)
     n = upsert(conn, "ads_demographics", demo)
     conn.commit()
-    print(f"{n} строк")
+    print(f"{n} rows")
 
     asset_start, asset_end = get_date_range(conn, "ads_creative_assets")
-    print("RSA-ассеты (заголовки/описания)...", end=" ", flush=True)
+    print("RSA assets (headlines/descriptions)...", end=" ", flush=True)
     assets = fetch_creative_assets(client, asset_start, asset_end)
     n = upsert(conn, "ads_creative_assets", assets)
     conn.commit()
-    print(f"{n} строк")
+    print(f"{n} rows")
 
-    # Сводка
-    print("\n=== ЗАГРУЖЕНО ===")
+    # Summary
+    print("\n=== LOADED ===")
     for tbl in ("ads_campaigns", "ads_keywords", "ads_search_terms",
                 "ads_demographics", "ads_creative_assets"):
         row = conn.execute(f"SELECT COUNT(*), MIN(date), MAX(date) FROM {tbl}").fetchone()
-        print(f"  {tbl:<22} {row[0]:>7} строк | {row[1]} → {row[2]}")
+        print(f"  {tbl:<22} {row[0]:>7} rows | {row[1]} → {row[2]}")
 
     conn.close()
-    print("\nГотово.")
+    print("\nDone.")
 
 
 if __name__ == "__main__":

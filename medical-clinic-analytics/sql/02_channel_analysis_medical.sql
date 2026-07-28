@@ -1,23 +1,24 @@
 -- ============================================================
--- MEDICAL: Анализ каналов, воронка по источникам, тренды
--- Данные: crm_leads + ga4_sessions + ga4_events (medical.db)
--- Период: июл 2025 – июн 2026
+-- MEDICAL: Channel analysis, source funnel, trends
+-- Data: crm_leads + ga4_sessions + ga4_events (medical.db)
+-- Period: Jul 2025 – Jun 2026
 -- ============================================================
--- ВАЖНО — архитектура воронок:
---   Старая система (до окт 2025): База (10176374) = основной поток
---   Новая система (с окт 2025):   Касание/Квалификация (7844402) = основной поток
---   База сейчас = корзина отклонённых + исторические лиды до окт 2025
---   Октябрь 2025 = точка разрыва: массовое закрытие старых лидов в Базе
---   Анализ новой системы → только pipeline_id=7844402 с created_at >= 2025-10-01
+-- PIPELINE ARCHITECTURE, FOR CONTEXT:
+--   Old system (before Oct 2025): Base (10176374) = main lead stream
+--   New system (from Oct 2025):  Touch/Qualification (7844402) = main lead stream
+--   Base today = a bucket of rejected leads + historical leads from before Oct 2025
+--   October 2025 = a break point: a mass closeout of old leads in Base
+--   Analyzing the new system → filter to pipeline_id=7844402, created_at >= 2025-10-01
 --
--- ОГРАНИЧЕНИЯ ДАННЫХ:
---   1. Звонки (главный канал): нет call tracking → атрибуция к кампании невозможна
---   2. Формы→CRM: интеграция работала нестабильно до дек 2025 (см. Q7)
---   3. Соцсети (Instagram/Telegram): source='other', нет автоматической разметки
---   Следствие: реальный вклад платного трафика в приёмы измерить нельзя без call tracking
+-- DATA LIMITATIONS:
+--   1. Calls (the main channel): no call tracking → can't attribute to a campaign
+--   2. Forms→CRM: the integration was unreliable until Dec 2025 (see Q7)
+--   3. Social (Instagram/Telegram): source='other', no automatic tagging
+--   Consequence: paid traffic's real contribution to appointments can't be measured
+--   without call tracking
 
 -- ─────────────────────────────────────────────────────────────
--- Q1. ВОРОНКА ПО ИСТОЧНИКАМ — все лиды (все воронки, весь период)
+-- Q1. FUNNEL BY SOURCE — all leads (all pipelines, full period)
 -- ─────────────────────────────────────────────────────────────
 SELECT
     source,
@@ -31,19 +32,19 @@ GROUP BY source
 ORDER BY leads DESC;
 
 /*
-РЕЗУЛЬТАТ (июл 2025 – июн 2026):
+RESULT (Jul 2025 – Jun 2026):
   other         17371  won=4136  lost=8974  active=4261  CR=23.8%
   call           9942  won=3213  lost=4686  active=2043  CR=32.3%
   site_organic   1909  won= 266  lost=1456  active= 187  CR=13.9%
   site_paid       503  won=  30  lost= 355  active= 118  CR= 6.0%
 
-NB: "won" здесь = квалифицирован внутри своей воронки (зависит от pipeline).
-В Базе "won" = закрыто (часто массово). В Касании "won" = готов к записи.
-Для реальной конверсии к приёму → Q4.
+NB: "won" here = qualified within its own pipeline (meaning depends on the pipeline).
+In Base, "won" = closed (often in bulk). In Touch, "won" = ready to book.
+For the real conversion rate to an appointment → see Q4.
 */
 
 -- ─────────────────────────────────────────────────────────────
--- Q2. АНОМАЛИЯ: ОКТЯБРЬ 2025 — расшифровка
+-- Q2. ANOMALY: OCTOBER 2025 — breakdown
 -- ─────────────────────────────────────────────────────────────
 SELECT
     pipeline_id,
@@ -55,18 +56,19 @@ GROUP BY pipeline_id, status
 ORDER BY pipeline_id, leads DESC;
 
 /*
-РЕЗУЛЬТАТ:
-  pipeline=10176374 (База) won=2929 lost=635 → массовое закрытие при запуске Касания
-  pipeline=7844402 (Касание) lost=1262 won=74 → первый месяц новой системы
-  pipeline=10176362 (Назначение) won=161 lost=18 → обычный поток записей
+RESULT:
+  pipeline=10176374 (Base) won=2929 lost=635 → mass closeout when Touch launched
+  pipeline=7844402 (Touch) lost=1262 won=74 → first month of the new system
+  pipeline=10176362 (Appointment) won=161 lost=18 → normal booking flow
 
-Объяснение: при переводе на новую систему старые лиды в Базе были массово закрыты.
-Октябрь 2025 в сводных отчётах = ИСКЛЮЧИТЬ или пометить как артефакт перехода.
+Explanation: migrating to the new system triggered a mass closeout of old leads
+in Base. October 2025 should be EXCLUDED or flagged as a migration artifact in
+any summary reporting.
 */
 
 -- ─────────────────────────────────────────────────────────────
--- Q3. ВОРОНКА В КАСАНИИ — контактный уровень (новая система)
--- Отражает реальные показатели обработки лидов с окт 2025
+-- Q3. FUNNEL IN TOUCH — contact level (new system)
+-- Reflects real lead-processing numbers from Oct 2025 onward
 -- ─────────────────────────────────────────────────────────────
 WITH contacts AS (
     SELECT contact_id,
@@ -91,22 +93,22 @@ GROUP BY source
 ORDER BY contacts DESC;
 
 /*
-РЕЗУЛЬТАТ (контакты в Касании с окт 2025):
-  other         3714  квалиф=438  отклон=2991  в работе=305  12%
-  call          1826  квалиф=394  отклон=1488  в работе=  2  22%
-  site_organic   638  квалиф= 26  отклон= 615  в работе=  1   4%
-  site_paid      360  квалиф= 15  отклон= 346  в работе=  0   4%
+RESULT (contacts in Touch since Oct 2025):
+  other         3714  qualified=438  rejected=2991  in_work=305  12%
+  call          1826  qualified=394  rejected=1488  in_work=  2  22%
+  site_organic   638  qualified= 26  rejected= 615  in_work=  1   4%
+  site_paid      360  qualified= 15  rejected= 346  in_work=  0   4%
 
-"Квалифицирован" в Касании = won = готов к записи на приём.
-Итого 6538 контактов, 873 квалифицированы (13.4%).
-call — наилучшая квалификация (22%), платный сайт — наихудшая (4%).
+"Qualified" in Touch = won = ready to book an appointment.
+Total: 6538 contacts, 873 qualified (13.4%).
+call has the best qualification rate (22%), paid web traffic the worst (4%).
 */
 
 -- ─────────────────────────────────────────────────────────────
--- Q4. END-TO-END ВОРОНКА: Касание → реальный приём
--- Источник входа × сколько дошли до pipeline 10176362 won
+-- Q4. END-TO-END FUNNEL: Touch → actual appointment
+-- Entry source × how many made it to pipeline 10176362 won
 -- ─────────────────────────────────────────────────────────────
-WITH kach_contacts AS (
+WITH touch_contacts AS (
     SELECT contact_id, MAX(source) AS source
     FROM crm_leads
     WHERE pipeline_id=7844402 AND contact_id IS NOT NULL
@@ -118,30 +120,30 @@ had_appt AS (
     WHERE pipeline_id=10176362 AND status='won'
 )
 SELECT
-    k.source,
-    COUNT(DISTINCT k.contact_id)                                          AS entered,
+    t.source,
+    COUNT(DISTINCT t.contact_id)                                          AS entered,
     COUNT(DISTINCT a.contact_id)                                          AS got_appt,
-    ROUND(100.0*COUNT(DISTINCT a.contact_id)/COUNT(DISTINCT k.contact_id),1) AS cr_pct
-FROM kach_contacts k
-LEFT JOIN had_appt a ON k.contact_id=a.contact_id
-GROUP BY k.source
+    ROUND(100.0*COUNT(DISTINCT a.contact_id)/COUNT(DISTINCT t.contact_id),1) AS cr_pct
+FROM touch_contacts t
+LEFT JOIN had_appt a ON t.contact_id=a.contact_id
+GROUP BY t.source
 ORDER BY entered DESC;
 
 /*
-РЕЗУЛЬТАТ (end-to-end: Касание вход → факт приёма):
-  other         3714  → 319 приёмов   CR=8.6%
-  call          1826  → 380 приёмов   CR=20.8%  ← главный канал конверсии
-  site_organic   638  →  19 приёмов   CR=3.0%
-  site_paid      360  →  10 приёмов   CR=2.8%
+RESULT (end-to-end: Touch entry → actual appointment):
+  other         3714  → 319 appointments  CR=8.6%
+  call          1826  → 380 appointments  CR=20.8%  ← the top conversion channel
+  site_organic   638  →  19 appointments  CR=3.0%
+  site_paid      360  →  10 appointments  CR=2.8%
 
-Итого Касание: 6538 → 728 → CR=11.1%
-ВАЖНО: 'other' включает Instagram, Telegram, WhatsApp, сарафанку без разметки.
-call CR=20.8% — реальный бенчмарк для оценки качества звонкового канала.
-site_paid CR=2.8% — нижняя граница: часть платных лидов классифицирована как 'other'.
+Total Touch: 6538 → 728 → CR=11.1%
+NB: 'other' includes Instagram, Telegram, WhatsApp, and word-of-mouth with no tagging.
+call's CR of 20.8% is the real benchmark for judging the phone channel's quality.
+site_paid's CR of 2.8% is a floor: some paid leads get classified as 'other'.
 */
 
 -- ─────────────────────────────────────────────────────────────
--- Q5. МЕСЯЧНЫЙ ТРЕНД В КАСАНИИ (новая система, окт 2025+)
+-- Q5. MONTHLY TREND IN TOUCH (new system, Oct 2025+)
 -- ─────────────────────────────────────────────────────────────
 WITH contacts AS (
     SELECT contact_id,
@@ -167,28 +169,29 @@ GROUP BY m
 ORDER BY m;
 
 /*
-РЕЗУЛЬТАТ:
-  2025-10  1203  квал=  14  1.2%  | call=280  paid=  0  org= 53  other=870
-  2025-11   484  квал=  35  7.2%  | call=218  paid=  1  org= 37  other=228
-  2025-12   217  квал=  13  6.0%  | call= 68  paid=  4  org= 27  other=118
-  2026-01   714  квал=  38  5.3%  | call=145  paid=  9  org=175  other=385
-  2026-02   606  квал=  91 15.0%  | call=122  paid= 14  org= 30  other=440
-  2026-03   600  квал=  82 13.7%  | call=138  paid= 11  org= 40  other=411
-  2026-04   510  квал= 161 31.6%  | call=211  paid= 12  org= 41  other=246
-  2026-05   841  квал= 253 30.1%  | call=327  paid= 51  org= 45  other=418
-  2026-06  1363  квал= 186 13.6%  | call=317  paid=258  org=190  other=598
+RESULT:
+  2025-10  1203  qual=  14  1.2%  | call=280  paid=  0  org= 53  other=870
+  2025-11   484  qual=  35  7.2%  | call=218  paid=  1  org= 37  other=228
+  2025-12   217  qual=  13  6.0%  | call= 68  paid=  4  org= 27  other=118
+  2026-01   714  qual=  38  5.3%  | call=145  paid=  9  org=175  other=385
+  2026-02   606  qual=  91 15.0%  | call=122  paid= 14  org= 30  other=440
+  2026-03   600  qual=  82 13.7%  | call=138  paid= 11  org= 40  other=411
+  2026-04   510  qual= 161 31.6%  | call=211  paid= 12  org= 41  other=246
+  2026-05   841  qual= 253 30.1%  | call=327  paid= 51  org= 45  other=418
+  2026-06  1363  qual= 186 13.6%  | call=317  paid=258  org=190  other=598
 
-ТРЕНДЫ:
-- Окт 2025: первый месяц, все лиды ещё "в работе" → CR=1.2% (артефакт)
-- Нояб–янв: CR 5-7%, нормальный разгон новой системы
-- Фев–май 2026: CR 13-32% — стабильный рабочий режим
-- Апр–май: CR 30%+ — пик (сезонность? акции?)
-- Июн 2026: CR падает до 14% при +62% объёма → новый сайт дал много неквала
-  site_paid = 258 (x5 vs апрель) — форма нового сайта заработала 23.06
+TRENDS:
+- Oct 2025: first month, most leads still "in progress" → CR=1.2% (artifact)
+- Nov–Jan: CR 5-7%, normal ramp-up of the new system
+- Feb–May 2026: CR 13-32% — stable steady state
+- Apr–May: CR 30%+ — peak (seasonality? promotions?)
+- Jun 2026: CR drops to 14% while volume is +62% → the new site brought in
+  more low-quality leads; site_paid = 258 (5x April) — the new site's form
+  went live 06-23
 */
 
 -- ─────────────────────────────────────────────────────────────
--- Q6. GA4 КАНАЛЫ — сессии и конверсии (12 мес)
+-- Q6. GA4 CHANNELS — sessions and conversions (12 months)
 -- ─────────────────────────────────────────────────────────────
 SELECT
     channel,
@@ -200,22 +203,23 @@ GROUP BY channel
 ORDER BY sessions DESC;
 
 /*
-РЕЗУЛЬТАТ:
-  Cross-network   49230  conv=4034  CR=8.2%  ← PMax кампании
+RESULT:
+  Cross-network   49230  conv=4034  CR=8.2%  ← PMax campaigns
   Organic Search  22035  conv= 303  CR=1.4%
-  Paid Search     14673  conv=1497  CR=10.2% ← обычный поиск
+  Paid Search     14673  conv=1497  CR=10.2% ← standard search
   Direct           7068  conv= 271  CR=3.8%
   Organic Social   3270  conv=  23  CR=0.7%
   Display           702  conv=   9  CR=1.3%
 
-"Конверсии" в GA4 = click_number (4610), form_call_submit (353) и другие key events.
-Главная конверсия клиники = click_number (клик по номеру) = 90% всех конверсий.
-GA4 Cross-network 8.2% CR vs Paid Search 10.2% — обе кампании работают сопоставимо.
+GA4 "conversions" here = click_number (4610), form_call_submit (353), and other
+key events. The clinic's primary conversion is click_number (a tap on the phone
+number) = 90% of all conversions. Cross-network's 8.2% CR vs Paid Search's 10.2%
+puts the two campaign types roughly on par.
 */
 
 -- ─────────────────────────────────────────────────────────────
--- Q7. GA4 paid СЕССИИ vs CRM site_paid ЛИДЫ — по месяцам
--- Показывает масштаб gap: сколько paid сессий не доходят в CRM
+-- Q7. GA4 PAID SESSIONS vs CRM site_paid LEADS — by month
+-- Shows the scale of the gap: how many paid sessions never make it to CRM
 -- ─────────────────────────────────────────────────────────────
 SELECT
     strftime('%Y-%m', g.date)                                             AS month,
@@ -227,8 +231,7 @@ FROM ga4_sessions g
 GROUP BY month
 ORDER BY month;
 
--- (Для сравнения с CRM site_paid — JOIN через Python или вручную):
--- CRM site_paid по месяцам:
+-- CRM site_paid by month (compared against the above manually/in Python):
 SELECT
     strftime('%Y-%m', created_at)                                         AS month,
     COUNT(*)                                                              AS crm_site_paid
@@ -238,26 +241,27 @@ GROUP BY month
 ORDER BY month;
 
 /*
-СРАВНЕНИЕ (GA4 paid конверсии vs CRM site_paid лиды):
-  2025-07: GA4=526 | CRM=0   ← форма-CRM интеграция не работала
+COMPARISON (GA4 paid conversions vs CRM site_paid leads):
+  2025-07: GA4=526 | CRM=0   ← form-to-CRM integration wasn't working yet
   2025-08: GA4=599 | CRM=0
   2025-09: GA4=668 | CRM=0
   2025-10: GA4=276 | CRM=0
   2025-11: GA4=379 | CRM=1
-  2025-12: GA4=408 | CRM=8   ← интеграция появилась
-  2026-01: GA4=686 | CRM=24  ← GA4 в 28x больше (звонки + формы vs только формы CRM)
+  2025-12: GA4=408 | CRM=8   ← integration comes online
+  2026-01: GA4=686 | CRM=24  ← GA4 is 28x higher (calls + forms vs CRM forms only)
   2026-02: GA4=476 | CRM=37
   2026-03: GA4=480 | CRM=22
   2026-04: GA4=120 | CRM=25
   2026-05: GA4=517 | CRM=64
-  2026-06: GA4=396 | CRM=322 ← новый сайт: форма работает, разрыв минимален
+  2026-06: GA4=396 | CRM=322 ← new site: the form works, the gap nearly closes
 
-GA4 "конверсии" ≠ CRM лиды: большинство GA4 conv = клики по номеру (звонки),
-в CRM попадают как source='call', а не 'site_paid'. Это объясняет постоянный разрыв.
+GA4 "conversions" ≠ CRM leads: most GA4 conversions are phone-number clicks
+(calls), which land in CRM as source='call', not 'site_paid'. This explains
+the persistent gap.
 */
 
 -- ─────────────────────────────────────────────────────────────
--- Q8. КОНВЕРСИОННЫЕ СОБЫТИЯ GA4 (paid vs organic)
+-- Q8. GA4 CONVERSION EVENTS (paid vs organic)
 -- ─────────────────────────────────────────────────────────────
 SELECT
     event_label,
@@ -269,44 +273,49 @@ GROUP BY event_label
 ORDER BY total DESC;
 
 /*
-РЕЗУЛЬТАТ:
-  click_number              5066   4613   91%  ← главная "конверсия" = клик по номеру
-  form_call_submit           353    315   89%  ← старая форма, до нового сайта
+RESULT:
+  click_number              5066   4613   91%  ← the main "conversion" is a phone tap
+  form_call_submit           353    315   89%  ← old form, before the new site
   form_start                  62     56   90%
-  form_appointment_side_submit 23    23  100%  ← новая форма (с 23.06.2026)
+  form_appointment_side_submit 23    23  100%  ← new form (since 2026-06-23)
   form_submit                 16     16  100%
   click_instagram              7      7  100%
 
-Платный трафик генерирует 91% кликов по номеру и 89% отправок форм.
-Всего paid форм: 315 + 23 + 16 = 354 за год → сопоставимо с CRM site_paid (503).
-Главный инструмент конверсии клиники — ЗВОНОК, не форма.
-Без call tracking ROI платного трафика неизмерим.
+Paid traffic drives 91% of phone-number clicks and 89% of form submissions.
+Total paid forms: 315 + 23 + 16 = 354 over the year — comparable to CRM's
+site_paid count (503). The clinic's main conversion tool is the PHONE CALL,
+not the form. Without call tracking, paid traffic's real ROI can't be measured.
 */
 
 -- ─────────────────────────────────────────────────────────────
--- Q9. ИТОГОВОЕ РЕЗЮМЕ — для обсуждения с CMO
+-- Q9. SUMMARY — for a stakeholder discussion
 -- ─────────────────────────────────────────────────────────────
 /*
-КАНАЛЬНАЯ ВОРОНКА (новая система, окт 2025 – июн 2026):
+CHANNEL FUNNEL (new system, Oct 2025 – Jun 2026):
 
-                Вход     → Квалиф  → Приём    | CR квал  CR приём
-  call          1826     →  394    →  380      | 22%      20.8%
-  other         3714     →  438    →  319      |  12%      8.6%
-  site_paid      360     →   15    →   10      |   4%      2.8%
-  site_organic   638     →   26    →   19      |   4%      3.0%
-  ИТОГО         6538     →  873    →  728      |  13%     11.1%
+                Entered  → Qualified → Appt     | Qual CR  Appt CR
+  call          1826     →  394     →  380      | 22%      20.8%
+  other         3714     →  438     →  319      | 12%       8.6%
+  site_paid      360     →   15     →   10      |  4%       2.8%
+  site_organic   638     →   26     →   19      |  4%       3.0%
+  TOTAL         6538     →  873     →  728      | 13%      11.1%
 
-КЛЮЧЕВЫЕ ВЫВОДЫ:
-1. Звонки = лучший канал (CR 20.8%), но без call tracking не знаем откуда звонки.
-2. 'other' (57% всего потока) = соцсети/мессенджеры. CR 8.6% — хороший результат,
-   но нельзя разбить на Instagram/Telegram/WhatsApp без автотеггинга.
-3. Платный трафик site_paid: нижняя граница 2.8% CR. Реальная цифра выше,
-   т.к. часть платных лидов звонит → попадает в 'call'.
-4. Июнь 2026: новый сайт дал x5 site_paid лидов, CR Касания упал (много неквала
-   с форм) — нормально для первого месяца, нужно мониторить.
+KEY TAKEAWAYS:
+1. Calls are the best channel (CR 20.8%), but without call tracking we don't
+   know which campaign drove them.
+2. 'other' (57% of all volume) is social/messengers. An 8.6% CR is a solid
+   result, but it can't be broken down into Instagram/Telegram/WhatsApp
+   without automatic tagging.
+3. Paid web traffic (site_paid): a 2.8% CR is a floor. The real number is
+   higher, since some paid leads call in and land under 'call' instead.
+4. June 2026: the new site brought in 5x more site_paid leads, and Touch's
+   CR dropped (more unqualified form leads) — normal for a first month, but
+   worth monitoring.
 
-ЧТО НУЖНО ПОЧИНИТЬ (приоритет):
-1. Call tracking (Calltouch/CoMagic) — разблокирует атрибуцию 90% конверсий
-2. Автотеггинг Instagram/Telegram (виджет Калькулятор полей) — расшифрует 'other'
-3. UTM→CRM на новом сайте — мониторинг уже работает (форма починена 23.06)
+WHAT TO FIX (in priority order):
+1. Call tracking (Calltouch/CoMagic) — would unlock attribution for 90% of
+   conversions
+2. Automatic tagging for Instagram/Telegram — would break down 'other'
+3. UTM→CRM on the new site — already being monitored (the form was fixed
+   on 2026-06-23)
 */

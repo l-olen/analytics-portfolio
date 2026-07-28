@@ -1,20 +1,20 @@
--- Схема базы данных: education.db
--- Образовательный центр
+-- Database schema: education.db
+-- Education center
 
 CREATE TABLE IF NOT EXISTS crm_leads (
     lead_id         INTEGER PRIMARY KEY,
-    created_at      TEXT NOT NULL,       -- полный datetime: '2024-03-15 14:23:07' (UTC)
-    created_date    TEXT,                -- только дата: '2024-03-15' (для GROUP BY)
+    created_at      TEXT NOT NULL,       -- full datetime: '2024-03-15 14:23:07' (UTC)
+    created_date    TEXT,                -- date only: '2024-03-15' (for GROUP BY)
     updated_at      TEXT,
     status          TEXT,                -- won / lost / in_progress
     source          TEXT,                -- site_web / site_quiz / call / other
-    tags            TEXT,                -- сырые теги через запятую
+    tags            TEXT,                -- raw comma-separated tags
     price           REAL DEFAULT 0,
     pipeline_id     INTEGER,
-    stage_id        INTEGER,             -- status_id в AmoCRM (текущий этап воронки)
+    stage_id        INTEGER,             -- status_id in AmoCRM (current funnel stage)
     contact_id      INTEGER,
-    is_bot          INTEGER DEFAULT 0,   -- 1 = помечен как бот (burst detection)
-    -- UTM attribution (tracking_data поля из AmoCRM)
+    is_bot          INTEGER DEFAULT 0,   -- 1 = flagged as a bot (burst detection)
+    -- UTM attribution (tracking_data fields from AmoCRM)
     utm_source      TEXT,
     utm_medium      TEXT,
     utm_campaign    TEXT,
@@ -26,15 +26,15 @@ CREATE TABLE IF NOT EXISTS crm_leads (
     roistat         TEXT,
     referrer        TEXT,
     gclientid       TEXT,                -- Google Analytics client ID (_ga cookie)
-    -- Бизнес-классификация
-    crm_source      TEXT,                -- поле "Источник" (AmoCRM)
-    mesto_ucheby    TEXT,                -- "Место учёбы": Школа / Вуз / ...
-    klass_kurs      TEXT,                -- "Класс/Курс": 9, 10, 11, ...
-    pervoe_obr      TEXT,                -- "Первое обращение": Абитуриент / ...
-    yazyk_obuch     TEXT,                -- "Язык обучения": Русский / Узбекский
-    produkt         TEXT,                -- "Продукт": русский язык / математика / ...
-    abc_category    TEXT,                -- "ABC - категории": A / B / C
-    reklama_kanal   TEXT                 -- "каналы рекламы"
+    -- Business classification
+    crm_source        TEXT,                -- the "Source" field in AmoCRM
+    study_location    TEXT,                -- "Place of study": school / university / ...
+    grade_or_course   TEXT,                -- "Grade/Course": 9, 10, 11, ...
+    inquiry_type      TEXT,                -- "First inquiry type": prospective student / ...
+    instruction_language TEXT,             -- "Language of instruction": Russian / Uzbek
+    product           TEXT,                -- "Product": Russian language / math / ...
+    abc_category      TEXT,                -- "ABC category": A / B / C
+    ad_channel        TEXT                 -- "Ad channel"
 );
 
 CREATE TABLE IF NOT EXISTS ga4_sessions (

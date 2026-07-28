@@ -1,65 +1,46 @@
-# Кейс: Аналитика образовательного центра — аудитория и креативы
+# Case: Education Center Analytics — Audience & Creative
 
-**Контекст:** Образовательный центр. Реклама через Google Ads, трекинг через
-GA4, лиды в AmoCRM — плюс детализация по аудитории и рекламным креативам на
-уровне Google Ads API.
+**Context:** An education center offering exam-prep and university-admission courses. Advertising runs on Google Ads, tracking through GA4, leads land in AmoCRM — plus audience and ad-creative breakdowns pulled directly from the Google Ads API.
 
-**Задача:** Построить end-to-end аналитическую систему — от сырых данных API
-до SQL-анализа воронки и разбора эффективности рекламных сообщений по
-аудитории.
+**Task:** Build an end-to-end analytics system — from raw API data to SQL-based funnel analysis and ad-creative performance by audience segment.
 
-## Стек
+## Stack
 
-- **Python** — ETL: выгрузка из Google Ads API, GA4 API, AmoCRM API
-- **SQLite** — хранение исторических данных (12 месяцев)
-- **SQL** — CTE, оконные функции, многошаговый funnel-анализ через `contact_id`
-- **Power BI** — дашборд
+- **Python** — ETL: pulling data from the Google Ads API, GA4 API, AmoCRM API
+- **SQLite** — 12 months of historical data
+- **SQL** — CTEs, window functions, multi-step funnel analysis via `contact_id`
+- **Power BI** — dashboard
 
-## Архитектура
+## Architecture
 
 ```
 Google Ads API ──┐
-GA4 API        ──┼──► ETL (Python) ──► SQLite ──► SQL-анализ ──► Power BI
+GA4 API        ──┼──► ETL (Python) ──► SQLite ──► SQL analysis ──► Power BI
 AmoCRM API     ──┘
 ```
 
-## Структура
+## Structure
 
 ```
-etl/            скрипты выгрузки (локально, не в репо)
+etl/            extraction scripts
     etl_crm_education.py, etl_ga4_education.py, etl_ads_education.py
     schema_education.sql
 sql/
-    01_funnel_education.sql              воронка канал → лид → сделка
-    04_audience_creative_education.sql   возраст/пол, CTR по теме объявления
-data/
-    education.db, education_ads.db — реальные локальные базы (gitignored, не в репо)
+    01_funnel_education.sql              channel → lead → deal funnel
+    04_audience_creative_education.sql   age/gender breakdown, CTR by ad theme
 dashboards/csv_demo/
-    — анонимизированные экспорты для публикации (объём ×4/×12, проценты не масштабируются)
+    anonymized exports for publication
 ```
 
-## Ключевые инсайты
+## Key Findings
 
-*Цифры ниже — из публичных анонимизированных данных (`dashboards/csv_demo/`).
-Проценты (CTR/CVR) в анонимизации не масштабируются и равны реальным.*
+*Figures below come from the anonymized public export (`dashboards/csv_demo/`). Ratios (CTR/CVR) are preserved exactly as measured.*
 
-- **Заголовки объявлений на теме "страх" — CTR 1.6%, против 9.8% у
-  объявлений с конкретным результатом (IELTS)** — почти шестикратная разница.
-  Честная оговорка: тема "страх" представлена всего одним заголовком на
-  небольшом объёме показов — направление чёткое, но это не статистически
-  надёжный вывод на большой выборке.
-- **Женщины конвертируют эффективнее мужчин:** CVR 4.0% против 3.12% — при
-  том что визуальный ряд объявлений исторически ориентирован на молодую
-  мужскую аудиторию.
-- **Возраст 45–54 — лучший CVR (4.34%) среди определённых возрастных
-  групп** — выше, чем у аудитории 18–24, на которую обычно делают акцент.
-- **Ограничение, задокументированное честно:** связать audience/creative-срез
-  с реальными продажами в CRM нельзя — Google Ads API не отдаёт `gclid` на
-  этом уровне детализации. Есть только грубый campaign-level мост (4.5%
-  покрытие), на котором отдельный анализ строить не стали — выборка слишком
-  тонкая для выводов.
+- **Fear-based ad headlines get a 1.6% CTR, versus 9.8% for result-oriented copy (e.g. IELTS-focused ads)** — almost a 6x gap. Caveat worth stating plainly: the "fear" theme is represented by a single headline on a modest number of impressions, so the direction is clear but this isn't a statistically robust sample.
+- **Women convert better than men:** 4.0% CVR versus 3.12% — even though the ad creative has historically skewed toward a young-male visual style.
+- **The 45–54 age group has the best CVR (4.34%) of any defined age bracket** — better than the 18–24 audience the campaigns are typically built around.
+- **An honestly documented limitation:** audience/creative-level data can't be joined to actual CRM sales — the Google Ads API doesn't expose `gclid` at that level of granularity. There's only a rough campaign-level bridge (4.5% coverage), too thin a sample to build a separate analysis on.
 
-## Примечания по данным
+## Data Notes
 
-- Данные анонимизированы: числа смещены на случайный коэффициент, реальное
-  имя клиента и названия рекламных кампаний заменены на generic-названия
+- Data is anonymized: absolute figures are scaled, and the client's real name and campaign names are replaced with generic labels throughout

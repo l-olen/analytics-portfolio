@@ -1,66 +1,49 @@
-# Кейс: Маркетинговая аналитика частной медицинской клиники
+# Case: Marketing Analytics for a Private Medical Clinic
 
-**Контекст:** Частная медицинская клиника, Ташкент. Реклама через Google Ads,
-трекинг через GA4, лиды в AmoCRM.
+**Context:** A private medical clinic in Tashkent, Uzbekistan. Advertising runs on Google Ads, tracking through GA4, leads land in AmoCRM.
 
-**Задача:** Построить end-to-end аналитическую систему — от сырых данных API
-до SQL-анализа воронки и поиска дыр в атрибуции.
+**Task:** Build an end-to-end analytics system — from raw API data to SQL-based funnel analysis and attribution-gap detection.
 
-## Стек
+## Stack
 
-- **Python** — ETL: выгрузка из Google Ads API, GA4 API, AmoCRM API
-- **SQLite** — хранение исторических данных (12 месяцев)
-- **SQL** — CTE, оконные функции (LAG/LEAD), многошаговый funnel-анализ через `contact_id`
-- **Power BI** — дашборд
+- **Python** — ETL: pulling data from the Google Ads API, GA4 API, AmoCRM API
+- **SQLite** — 12 months of historical data
+- **SQL** — CTEs, window functions (LAG/LEAD), multi-step funnel analysis via `contact_id`
+- **Power BI** — dashboard
 
-## Архитектура
+## Architecture
 
 ```
 Google Ads API ──┐
-GA4 API        ──┼──► ETL (Python) ──► SQLite ──► SQL-анализ ──► Power BI
+GA4 API        ──┼──► ETL (Python) ──► SQLite ──► SQL analysis ──► Power BI
 AmoCRM API     ──┘
 ```
 
-## Структура
+## Structure
 
 ```
-etl/            скрипты выгрузки (локально, не в репо)
+etl/            extraction scripts
     etl_crm_medical.py, etl_ga4_medical.py, etl_ads_medical.py
     schema_medical.sql
 sql/
-    01_funnel_medical.sql            воронка канал → лид → приём
-    02_channel_analysis_medical.sql  CTR, CPC, стоимость лида по каналу
-    02_gap_analysis_medical.sql      GA4 vs CRM: где и почему теряются данные
-    03_trends_medical.sql            месячные тренды, сравнение периодов
-data/
-    medical.db, medical_ads.db — реальные локальные базы (gitignored, не в репо)
+    01_funnel_medical.sql            channel → lead → appointment funnel
+    02_channel_analysis_medical.sql  CTR, CPC, cost per lead by channel
+    02_gap_analysis_medical.sql      GA4 vs CRM: where and why data diverges
+    03_trends_medical.sql            monthly trends, period comparisons
 dashboards/csv_demo/
-    — анонимизированные экспорты для публикации (объём ×4, проценты не масштабируются)
+    anonymized exports for publication
 ```
 
-## Ключевые инсайты
+## Key Findings
 
-*Цифры ниже — из публичных анонимизированных данных (`dashboards/csv_demo/`).
-Проценты (CTR/CVR/CR) в анонимизации не масштабируются и равны реальным —
-масштабируются только абсолютные объёмы и суммы в долларах.*
+*Figures below come from the anonymized public export (`dashboards/csv_demo/`). Ratios (CTR/CVR/CR) are preserved exactly as measured — only absolute volumes are scaled for anonymization.*
 
-- **Канал определяет конверсию сильнее, чем что-либо ещё в воронке.**
-  Обращения по звонку доходят до приёма в 20.8% случаев, тогда как платный
-  веб-трафик (site_paid) — только в 2.8%, органика — в 3.0%. Разрыв на
-  порядок между "тёплым" каналом и веб-формами.
-- **Главный объём конверсии — звонок, а не форма.** Платных кликов по номеру
-  телефона примерно в 13 раз больше, чем платных заявок через все формы
-  сайта вместе. Но звонки нельзя атрибутировать к конкретной рекламной
-  кампании — системный attribution gap, который не решить на уровне
-  трекинга форм.
-- **Расхождение GA4 и CRM по количеству платных форм — не баг.** CRM берёт
-  UTM-метку из URL, GA4 — из cookie-сессии (блокируется адблокерами) —
-  разная логика подсчёта одного и того же события, не потеря данных.
+- **Channel matters more than anything else in the funnel.** Phone-in leads convert to a booked appointment 20.8% of the time, versus only 2.8% for paid web traffic and 3.0% for organic. That's an order of magnitude gap between the "warm" channel and web forms.
+- **The main volume of conversions comes from phone calls, not forms.** Paid clicks on the phone number outnumber paid form submissions roughly 13x. But calls can't be attributed to a specific ad campaign — a structural attribution gap that form tracking alone can't fix.
+- **The discrepancy between GA4 and CRM paid-form counts isn't a bug.** CRM reads the UTM tag from the URL; GA4 reads it from a cookie session (which ad blockers can strip) — two different counting methods for the same event, not data loss.
 
-## Примечания по данным
+## Data Notes
 
-- Конверсии Google Ads: используется разбивка по `conversion_action_name`,
-  только формы с сайта (исключены звонки и Google Maps)
-- Дата запуска нового сайта: 2026-06-23 (breakpoint в анализе трендов)
-- Данные анонимизированы: числа смещены на случайный коэффициент, реальное
-  имя клиента заменено на generic-название
+- Google Ads conversions use the `conversion_action_name` breakdown, counting only on-site form submissions (calls and Google Maps actions excluded)
+- New site launch date: 2026-06-23 (the breakpoint used in trend analysis)
+- Data is anonymized: absolute figures are scaled, and the client's real name is replaced with a generic label throughout

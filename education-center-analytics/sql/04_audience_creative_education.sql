@@ -1,11 +1,11 @@
 -- ============================================================
--- Образовательный центр: аудитория (возраст/пол) и креативы (RSA)
--- База: education_ads.db
+-- Education center: audience (age/gender) and creative (RSA) analysis
+-- Database: education_ads.db
 -- ============================================================
--- Запуск: python run_sql.py sql/04_audience_creative_education.sql data/education_ads.db
+-- Run: python run_sql.py sql/04_audience_creative_education.sql data/education_ads.db
 
 -- ============================================================
--- 1. ВОЗРАСТ: объём, CTR, конверсия, стоимость лида — за весь период
+-- 1. AGE: volume, CTR, conversion, cost per lead -- full period
 -- ============================================================
 SELECT
     segment_value                                            AS age_range,
@@ -23,7 +23,7 @@ ORDER BY impressions DESC;
 
 
 -- ============================================================
--- 2. ПОЛ: та же разбивка
+-- 2. GENDER: the same breakdown
 -- ============================================================
 SELECT
     segment_value                                            AS gender,
@@ -41,7 +41,7 @@ ORDER BY impressions DESC;
 
 
 -- ============================================================
--- 3. ВОЗРАСТ × МЕСЯЦ: меняется ли профиль аудитории со временем
+-- 3. AGE × MONTH: does the audience profile shift over time
 -- ============================================================
 SELECT
     strftime('%Y-%m', date)                                  AS month,
@@ -55,8 +55,8 @@ ORDER BY month, impressions DESC;
 
 
 -- ============================================================
--- 4. RSA: топ заголовков по объёму (только с заметным трафиком,
---    чтобы CTR не был шумом на 5 показах)
+-- 4. RSA: top headlines by volume (only ones with real traffic,
+--    so CTR isn't just noise from 5 impressions)
 -- ============================================================
 SELECT
     asset_text,
@@ -73,23 +73,24 @@ LIMIT 30;
 
 
 -- ============================================================
--- 5. RSA: CTR по ТЕМЕ сообщения (Google performance_label здесь
---    не считается — NOT_APPLICABLE, поэтому смотрим по смыслу текста)
+-- 5. RSA: CTR by message THEME (Google's own performance_label is
+--    unusable here -- it's NOT_APPLICABLE for this account, so we
+--    classify by what the headline actually says)
 -- ============================================================
 SELECT
     CASE
         WHEN LOWER(asset_text) LIKE '%боишься%' OR LOWER(asset_text) LIKE '%не поступ%'
-            THEN 'страх / проблема'
+            THEN 'fear / problem'
         WHEN LOWER(asset_text) LIKE '%ielts%'
-            THEN 'IELTS / язык'
+            THEN 'IELTS / language'
         WHEN LOWER(asset_text) LIKE '%поступ%' OR LOWER(asset_text) LIKE '%вуз%'
              OR LOWER(asset_text) LIKE '%университет%'
-            THEN 'поступление в ВУЗ'
+            THEN 'university admission'
         WHEN LOWER(asset_text) LIKE '%экзамен%' OR LOWER(asset_text) LIKE '%сертифик%'
-            THEN 'экзамен / сертификация'
+            THEN 'exam / certification'
         WHEN LOWER(asset_text) LIKE '%пробн%' OR LOWER(asset_text) LIKE '%бесплатн%'
-            THEN 'пробный урок / бесплатно'
-        ELSE 'прочее / бренд'
+            THEN 'trial lesson / free'
+        ELSE 'other / brand'
     END                                                        AS theme,
     COUNT(DISTINCT asset_text)                                AS headlines_n,
     SUM(impressions)                                          AS impressions,

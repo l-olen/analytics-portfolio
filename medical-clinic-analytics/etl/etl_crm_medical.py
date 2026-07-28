@@ -1,4 +1,4 @@
-# Выгружает лиды медицинской клиники из AmoCRM за 12 месяцев → SQLite
+# Pulls the clinic's leads from AmoCRM for the last 12 months into SQLite
 
 import os
 import sqlite3
@@ -9,8 +9,8 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
-AMO_ENV_PATH = Path("C:/projects/my-project/google_ads/.env")
-load_dotenv(AMO_ENV_PATH, override=True)  # живые AMO-токены всегда отсюда
+AMO_ENV_PATH = Path(os.getenv("SHARED_ENV_PATH", Path(__file__).parent / ".env"))
+load_dotenv(AMO_ENV_PATH, override=True)  # live AMO tokens always come from here
 
 DB_PATH = Path(__file__).parent.parent / "data" / "medical.db"
 SCHEMA_PATH = Path(__file__).parent / "schema_medical.sql"
@@ -36,7 +36,7 @@ def _refresh_token() -> str:
     )
     data = resp.json()
     if "access_token" not in data:
-        raise RuntimeError(f"Не удалось обновить токен: {data}")
+        raise RuntimeError(f"Token refresh failed: {data}")
 
     env_path = AMO_ENV_PATH
     text = env_path.read_text(encoding="utf-8")
@@ -92,7 +92,7 @@ def fetch_leads(conn):
     since = int(start.timestamp())
     until = int(end.timestamp())
 
-    print(f"Период: {start.strftime('%Y-%m-%d')} — {end.strftime('%Y-%m-%d')}")
+    print(f"Period: {start.strftime('%Y-%m-%d')} — {end.strftime('%Y-%m-%d')}")
 
     total = 0
     page = 1
@@ -148,13 +148,13 @@ def fetch_leads(conn):
             total += 1
 
         conn.commit()
-        print(f"  Страница {page}: {len(leads)} лидов")
+        print(f"  Page {page}: {len(leads)} leads")
 
         if len(leads) < 250:
             break
         page += 1
 
-    print(f"\nГотово: {total} лидов записано")
+    print(f"\nDone: {total} leads written")
 
 
 def init_db(conn):

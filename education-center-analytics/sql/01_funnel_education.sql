@@ -1,35 +1,35 @@
 -- ============================================================
--- Образовательный центр: воронка и атрибуция
--- База: education.db  |  Лиды: Nov 2023 – Jul 2026
+-- Education center: funnel and attribution
+-- Database: education.db  |  Leads: Nov 2023 – Jul 2026
 -- ============================================================
--- ATTACH DATABASE 'data/education.db' AS b;  -- при запуске из medical.db
--- Или просто: sqlite3 data/education.db < sql/01_funnel_education.sql
+-- ATTACH DATABASE 'data/education.db' AS b;  -- when running from medical.db
+-- Or simply: sqlite3 data/education.db < sql/01_funnel_education.sql
 
 -- ============================================================
--- 0. СПРАВОЧНИК ВОРОНОК И ЭТАПОВ
+-- 0. PIPELINE AND STAGE REFERENCE
 -- ============================================================
--- Автоматические воронки (где работает bot detection):
---   7599026  Сall center
---   7378970  Отдел Продаж
---   7456518  Дожим
+-- Automated pipelines (where bot detection runs):
+--   7599026  Call center
+--   7378970  Sales Department
+--   7456518  Follow-up
 --  10481938  Administration
---  10486794  Архив лиды 01.01.2024 по 31.12.2025
+--  10486794  Archive leads 2024-01-01 to 2025-12-31
 --
--- Ручные воронки (ботов нет, данные вносятся менеджерами):
---   7693206  Воронка Узб
---   7645546  Онлайн воронка
---   8152890  Доп Продажи
---   8254930  Переписки
---   8928070  дтм тест база
---   9587506  Консалтинг
---   9685134  Выставка вузов 2025
---  10034018  Томсон лиды
+-- Manual pipelines (no bots, data entered by staff):
+--   7693206  Uzbekistan pipeline
+--   7645546  Online pipeline
+--   8152890  Upsells
+--   8254930  Correspondence
+--   8928070  DTM test base
+--   9587506  Consulting
+--   9685134  2025 University Fair
+--  10034018  Thomson leads
 --
--- Статусы: 142 = Успешно (won), 143 = Закрыто/Потеря (lost)
+-- Statuses: 142 = won, 143 = closed/lost
 
 
 -- ============================================================
--- 1. ОБЩАЯ ВОРОНКА (без ботов)
+-- 1. OVERALL FUNNEL (excluding bots)
 -- ============================================================
 SELECT
     COUNT(*)                                              AS total_leads,
@@ -42,7 +42,7 @@ WHERE is_bot = 0;
 
 
 -- ============================================================
--- 2. ВОРОНКА ПО ТИПУ ВОРОНКИ: авто vs ручные
+-- 2. FUNNEL BY PIPELINE TYPE: automated vs manual
 -- ============================================================
 SELECT
     CASE
@@ -60,7 +60,7 @@ GROUP BY pipeline_type;
 
 
 -- ============================================================
--- 3. ВОРОНКА ПО ИСТОЧНИКУ ЛИДА (тег-классификация)
+-- 3. FUNNEL BY LEAD SOURCE (tag classification)
 -- ============================================================
 SELECT
     source,
@@ -75,8 +75,8 @@ ORDER BY total DESC;
 
 
 -- ============================================================
--- 4. АТРИБУЦИЯ: ВОРОНКА ПО UTM-ИСТОЧНИКУ
--- (только лиды с utm_source, т.е. пришедшие с онлайн-рекламы)
+-- 4. ATTRIBUTION: FUNNEL BY UTM SOURCE
+-- (only leads with utm_source, i.e. leads from online ads)
 -- ============================================================
 SELECT
     utm_source,
@@ -86,13 +86,13 @@ SELECT
     ROUND(100.0*SUM(CASE WHEN status='won' THEN 1 ELSE 0 END)/COUNT(*),2) AS cr_pct
 FROM crm_leads
 WHERE is_bot = 0 AND utm_source IS NOT NULL
-  AND utm_source NOT IN ('UTM Medium:','utm_medium:','test')  -- фильтр мусора
+  AND utm_source NOT IN ('UTM Medium:','utm_medium:','test')  -- filters out junk values
 GROUP BY utm_source, utm_medium
 ORDER BY leads DESC;
 
 
 -- ============================================================
--- 5. ТОП КАМПАНИЙ ПО ОБЪЁМУ И CR
+-- 5. TOP CAMPAIGNS BY VOLUME AND CR
 -- ============================================================
 SELECT
     utm_source,
@@ -113,36 +113,36 @@ LIMIT 25;
 
 
 -- ============================================================
--- 6. ВОРОНКА ПО ПРОДУКТУ
+-- 6. FUNNEL BY PRODUCT
 -- ============================================================
 SELECT
-    produkt,
+    product,
     COUNT(*)  AS leads,
     SUM(CASE WHEN status='won'  THEN 1 ELSE 0 END) AS won,
     ROUND(100.0*SUM(CASE WHEN status='won' THEN 1 ELSE 0 END)/COUNT(*),2) AS cr_pct
 FROM crm_leads
-WHERE is_bot = 0 AND produkt IS NOT NULL
-GROUP BY produkt
+WHERE is_bot = 0 AND product IS NOT NULL
+GROUP BY product
 ORDER BY leads DESC
 LIMIT 20;
 
 
 -- ============================================================
--- 7. ВОРОНКА ПО КЛАССУ / КУРСУ
+-- 7. FUNNEL BY GRADE / COURSE
 -- ============================================================
 SELECT
-    klass_kurs   AS grade,
+    grade_or_course AS grade,
     COUNT(*)     AS leads,
     SUM(CASE WHEN status='won'  THEN 1 ELSE 0 END) AS won,
     ROUND(100.0*SUM(CASE WHEN status='won' THEN 1 ELSE 0 END)/COUNT(*),2) AS cr_pct
 FROM crm_leads
-WHERE is_bot = 0 AND klass_kurs IS NOT NULL
-GROUP BY klass_kurs
+WHERE is_bot = 0 AND grade_or_course IS NOT NULL
+GROUP BY grade_or_course
 ORDER BY leads DESC;
 
 
 -- ============================================================
--- 8. ABC-СЕГМЕНТАЦИЯ: распределение и конверсия
+-- 8. ABC SEGMENTATION: distribution and conversion
 -- ============================================================
 SELECT
     abc_category,
@@ -158,7 +158,7 @@ ORDER BY leads DESC;
 
 
 -- ============================================================
--- 9. МЕСЯЧНЫЙ ТРЕНД: объём лидов и CR
+-- 9. MONTHLY TREND: lead volume and CR
 -- ============================================================
 SELECT
     substr(created_date, 1, 7)                           AS month,
@@ -174,55 +174,55 @@ ORDER BY month;
 
 
 -- ============================================================
--- 10. АТРИБУЦИЯ: utm_source × продукт — пересечение каналов
+-- 10. ATTRIBUTION: utm_source × product — channel intersection
 -- ============================================================
 SELECT
     utm_source,
-    produkt,
+    product,
     COUNT(*)  AS leads,
     SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) AS won,
     ROUND(100.0*SUM(CASE WHEN status='won' THEN 1 ELSE 0 END)/COUNT(*),2) AS cr_pct
 FROM crm_leads
 WHERE is_bot = 0
   AND utm_source IS NOT NULL AND utm_source NOT IN ('UTM Medium:','test')
-  AND produkt IS NOT NULL
-GROUP BY utm_source, produkt
+  AND product IS NOT NULL
+GROUP BY utm_source, product
 HAVING leads >= 10
 ORDER BY utm_source, leads DESC;
 
 
 -- ============================================================
--- 11. ЯЗЫК ОБУЧЕНИЯ × ИСТОЧНИК — сегментация Узб/Рус аудитории
+-- 11. INSTRUCTION LANGUAGE × SOURCE — Uzbek/Russian audience segmentation
 -- ============================================================
 SELECT
-    yazyk_obuch  AS language,
+    instruction_language AS language,
     utm_source,
     COUNT(*)     AS leads,
     SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) AS won,
     ROUND(100.0*SUM(CASE WHEN status='won' THEN 1 ELSE 0 END)/COUNT(*),2) AS cr_pct
 FROM crm_leads
-WHERE is_bot = 0 AND yazyk_obuch IS NOT NULL
-GROUP BY yazyk_obuch, utm_source
-ORDER BY yazyk_obuch, leads DESC;
+WHERE is_bot = 0 AND instruction_language IS NOT NULL
+GROUP BY instruction_language, utm_source
+ORDER BY instruction_language, leads DESC;
 
 
 -- ============================================================
--- КАНАЛЬНАЯ КЛАССИФИКАЦИЯ (единая логика)
+-- CHANNEL CLASSIFICATION (shared logic)
 -- ============================================================
--- Правила классификации source (в ETL):
---   site_quiz  = теги: "квиз", "сайт квиз"
---   site_web   = теги: "заказ с сайта", "Сайт", "tilda"  ← Сайт и tilda добавлены
---   call       = теги: "555100400", "входящий", "пропущенный", + доп. тег колл-виджета
---   other      = всё остальное
+-- Source classification rules (in the ETL):
+--   site_quiz  = tags: "квиз" (quiz), "сайт квиз" (site quiz)
+--   site_web   = tags: "заказ с сайта" (site order), "Сайт" (site), "tilda"  <- "Сайт" and "tilda" added later
+--   call       = tags: "555100400", "входящий" (inbound), "пропущенный" (missed), + an extra call-widget tag
+--   other      = everything else
 --
--- Канальная логика на уровне лида:
---   UTM/click-id имеет приоритет над тегом-источником.
---   yclid = Яндекс веб-трафик (и платный и органический).
---   Для разделения paid vs organic Яндекс используй utm_medium='cpc'.
---   gclid передаётся редко — ориентируемся на utm_source/utm_medium.
---   Префиксы кампаний fk_ и km_ — одно агентство, разные периоды структуры.
+-- Channel logic at the lead level:
+--   UTM/click-id takes priority over the source tag.
+--   yclid = Yandex web traffic (both paid and organic).
+--   To split Yandex paid vs organic, use utm_medium='cpc'.
+--   gclid is rarely populated -- rely on utm_source/utm_medium instead.
+--   Campaign prefixes fk_ and km_ -- same agency, different structuring periods.
 
--- 12. CR ПО КАНАЛУ (по лиду, для ориентира по объёму)
+-- 12. CR BY CHANNEL (at lead level, as a volume reference)
 WITH channel_classified AS (
     SELECT *,
         CASE
@@ -248,11 +248,11 @@ FROM channel_classified
 GROUP BY channel ORDER BY leads DESC;
 
 
--- 13. АТРИБУЦИЯ НА УРОВНЕ КОНТАКТА (с переносом UTM)
--- Для каждого контакта собираем UTM-сигналы ВСЕХ его лидов.
--- Если в любом лиде контакта есть UTM — победа засчитывается этому каналу,
--- даже если сама сделка закрылась как звонок.
--- Приоритет: google > yandex > social > telegram > chatgpt > тег первого лида.
+-- 13. CONTACT-LEVEL ATTRIBUTION (with UTM carry-over)
+-- For each contact, we gather the UTM signals from ALL of their leads.
+-- If any of the contact's leads carries a UTM tag, the win is credited to that channel,
+-- even if the deal itself closed as a call.
+-- Priority: google > yandex > social > telegram > chatgpt > the first lead's tag.
 WITH contact_signals AS (
     SELECT contact_id,
            MAX(CASE WHEN utm_source='google' AND utm_medium='cpc'
@@ -293,8 +293,8 @@ LEFT JOIN first_tag ft ON ft.contact_id = cs.contact_id
 GROUP BY attributed_channel ORDER BY contacts DESC;
 
 
--- 14. ТОП КАМПАНИЙ (атрибуция на уровне контакта)
--- fk_ и km_ префиксы = одно агентство, объединять при анализе.
+-- 14. TOP CAMPAIGNS (contact-level attribution)
+-- fk_ and km_ prefixes = same agency, merge them during analysis.
 WITH contact_campaigns AS (
     SELECT contact_id,
            MAX(CASE WHEN utm_source IS NOT NULL
@@ -319,13 +319,13 @@ HAVING contacts >= 20
 ORDER BY contacts DESC LIMIT 25;
 
 
--- 15. ТЁМНЫЙ ПУЛЬ: UTM-покрытие выигранных контактов
--- 96.8% выигранных контактов не имеют никаких UTM-меток.
--- Структурные причины (не ошибки трекинга):
---   Архив (29k лидов, Nov'23–Dec'25) — UTM ещё не настраивался
---   Доп продажи — апсейл текущих студентов, UTM не нужен
---   дтм тест база / Консалтинг / Выставка — ручные каналы
---   Administration — дочерние лиды, UTM теряется при "Копировании сделок"
+-- 15. DARK FUNNEL: UTM coverage of won contacts
+-- 96.8% of won contacts carry no UTM tag at all.
+-- Structural reasons (not tracking bugs):
+--   Archive (29k leads, Nov'23-Dec'25) -- UTM tracking wasn't set up yet
+--   Upsells -- upselling existing students, UTM isn't relevant
+--   DTM test base / Consulting / Fair -- manual channels
+--   Administration -- child leads, UTM is lost when deals are "copied"
 WITH contact_utm AS (
     SELECT contact_id,
            MAX(CASE WHEN utm_source IS NOT NULL
@@ -350,73 +350,73 @@ FROM contact_utm;
 
 
 -- ============================================================
--- ИТОГОВАЯ ИСТОРИЯ (для кейса)
+-- SUMMARY (for the case write-up)
 -- ============================================================
--- База: ~51,900 лидов (Nov 2023 – Jul 2026), ~1,248 ботов (2.4%)
--- Чистых контактов: ~47,100 уникальных, 2,802 выиграно (CR 6.6%)
+-- Database: ~51,900 leads (Nov 2023 - Jul 2026), ~1,248 bots (2.4%)
+-- Clean contacts: ~47,100 unique, 2,802 won (CR 6.6%)
 --
--- ✓ CR по каналу (first-touch с переносом UTM):
+-- + CR by channel (first-touch with UTM carry-over):
 --     inbound_call 13% > telegram 8.2% > yandex_web 3.4% > paid_social 2.7%
 --     > paid_google 2.2% > site_web 1.4% > chatgpt_ref 1.1%
--- ✓ CR по продукту: право 29% / история 29% / математика 21% / английский 19%
--- ✓ CR по классу: 11 класс основная аудитория (5,384 лидов)
--- ✓ Тренд объёма и конверсий по месяцам (Q9)
--- ✓ ABC-сегментация (A=3k, B=2.5k, C=1.8k лидов)
+-- + CR by product: law 29% / history 29% / math 21% / English 19%
+-- + CR by grade: grade 11 is the main audience (5,384 leads)
+-- + Volume and conversion trend by month (Q9)
+-- + ABC segmentation (A=3k, B=2.5k, C=1.8k leads)
 --
--- КЛЮЧЕВОЙ ИНСАЙТ 1 — тёмный пуль атрибуции:
---   96.8% выигранных контактов не имеют UTM-разметки.
---   Структурные причины:
---     Архив (1389 wins) — исторические данные до настройки UTM-трекинга
---     дтм тест база (398) + Консалтинг (111) — ручные каналы, UTM не нужен
---     Доп продажи (259) — апсейл текущих студентов
---     Call center (472) — прямые звонки без онлайн-касания
---     Administration (287) — большинство лидов созданы напрямую, не через
---       онлайн-форму; "Копирование сделок" копирует UTM корректно, но только
---       когда исходный лид пришёл с сайта (таких ~10 из 784 в Administration).
---   Что поддаётся фиксу: передача gclid/fbclid через скрытые поля квиза,
---   систематический мёрдж контактов при звонке по онлайн-заявке.
+-- KEY FINDING 1 -- the attribution dark funnel:
+--   96.8% of won contacts carry no UTM tag.
+--   Structural reasons:
+--     Archive (1389 wins) -- historical data from before UTM tracking existed
+--     DTM test base (398) + Consulting (111) -- manual channels, UTM isn't relevant
+--     Upsells (259) -- upselling existing students
+--     Call center (472) -- direct calls with no online touchpoint
+--     Administration (287) -- most leads are created directly, not through
+--       an online form; "copying deals" copies UTM correctly, but only
+--       when the source lead came from the site (~10 of 784 in Administration).
+--   What's fixable: passing gclid/fbclid through hidden quiz fields,
+--   systematic contact merging when a call follows an online submission.
 --
--- КЛЮЧЕВОЙ ИНСАЙТ 2 — разрыв атрибуции веб → звонок:
---   2,622 из 2,625 Google-контактов: UTM на веб-лиде, конверсия на звонке.
---   Без переноса UTM эти контакты выглядят как "other" с CR 9%.
---   После переноса: paid_google CR = 2.2%, это реальный платный CR.
+-- KEY FINDING 2 -- the web-to-call attribution gap:
+--   2,622 of 2,625 Google contacts: UTM is on the web lead, the conversion is on a call.
+--   Without carrying the UTM over, these contacts look like "other" with a 9% CR.
+--   After carrying it over: paid_google CR = 2.2%, the real paid CR.
 --
--- КЛЮЧЕВОЙ ИНСАЙТ 3 — yclid = весь Яндекс (paid + organic):
---   yclid проставляется на всём яндекс-трафике, не только платном.
---   Для разделения: utm_medium='cpc' → paid (833 лидов, CR 2.4%)
---                   без cpc → organic/direct Яндекс (1,216 лидов, CR 2.8%)
---   CR почти одинаковый — органика Яндекса не хуже платной.
+-- KEY FINDING 3 -- yclid covers all of Yandex (paid + organic):
+--   yclid is set on all Yandex traffic, not just paid.
+--   To split it out: utm_medium='cpc' -> paid (833 leads, CR 2.4%)
+--                   without cpc -> organic/direct Yandex (1,216 leads, CR 2.8%)
+--   The CR is nearly identical -- Yandex organic performs no worse than paid.
 --
--- РЕКОМЕНДАЦИИ:
---   1. Передавать gclid/fbclid в скрытые поля квиза/формы
---   2. Настроить автоматический мёрдж контактов по номеру телефона
---   3. Настроить передачу UTM в Administration при "Копировании сделок"
---   4. gclientid (GA4 Client ID) есть у 2,021 лидов → потенциальный
---      мост к GA4 данным через BigQuery export
+-- RECOMMENDATIONS:
+--   1. Pass gclid/fbclid through hidden quiz/form fields
+--   2. Set up automatic contact merging by phone number
+--   3. Set up UTM pass-through in Administration when deals are "copied"
+--   4. gclientid (GA4 Client ID) is present on 2,021 leads -- a potential
+--      bridge to GA4 data via BigQuery export
 --
--- КЛЮЧЕВОЙ ИНСАЙТ 4 — Call center до 2026 = пустота, история в Архиве:
---   До января 2026 все входящие лиды шли в "Архив лиды 01.01.2024 по 31.12.2025"
---   (29,365 лидов, дек 2023 – дек 2025). Call center запущен как основная
---   воронка с янв 2026. Тренд внутри CC — только данные с янв 2026.
+-- KEY FINDING 4 -- Call center before 2026 is empty, history lives in the Archive:
+--   Before January 2026 all inbound leads went into "Archive leads 2024-01-01 to 2025-12-31"
+--   (29,365 leads, Dec 2023 - Dec 2025). Call center launched as the main
+--   pipeline from Jan 2026. The trend inside CC only reflects data from Jan 2026 on.
 --
--- КЛЮЧЕВОЙ ИНСАЙТ 5 — Instagram и Telegram конвертируют через чат, не звонок:
---   Instagram: 2,457 лидов (2026), 88.7% без тега звонка (Входящий/Исходящий).
---   Но когда звонок делается → CR 30-63% (vs 6.7% в среднем).
---   80 won с пустым тегом = конверсия через DM без звонка.
---   Telegram: 432 лидов, CR 26.9%. 84.7% без тега звонка.
---   100 won с пустым тегом = конвертируются через Telegram-чат.
---   Вывод: теги "Входящий/Исходящий" не отражают все касания.
---   Нельзя считать "нет тега = нет работы с лидом".
+-- KEY FINDING 5 -- Instagram and Telegram convert through chat, not calls:
+--   Instagram: 2,457 leads (2026), 88.7% carry no call tag (Inbound/Outbound).
+--   But when a call does happen -> CR 30-63% (vs 6.7% on average).
+--   80 wins with no tag = conversions through DMs, no call.
+--   Telegram: 432 leads, CR 26.9%. 84.7% carry no call tag.
+--   100 wins with no tag = converted through Telegram chat.
+--   Takeaway: the "Inbound/Outbound" tags don't capture every touchpoint.
+--   "No tag" can't be read as "no work was done on this lead".
 --
--- Что потребует дополнительного ETL:
---   ✗ Движение по этапам (время в каждом этапе, где отваливаются)
---   → etl_events_education.py → crm_lead_events
---     ~125k-250k событий, ~15 мин загрузки
+-- What would require additional ETL work:
+--   - Stage-by-stage movement (time spent per stage, where contacts drop off)
+--   -> etl_events_education.py -> crm_lead_events
+--     ~125k-250k events, ~15 min to load
 
 -- ============================================================
--- Q16: CALL CENTER 2026 — КАНАЛЫ × ДЕЙСТВИЕ ОПЕРАТОРА × СТАТУС
--- Источник канала: crm_source (поле 534651, ручная отметка оператора)
--- Тег действия: Входящий/Исходящий/Клиент не ответил/Пропущенный
+-- Q16: CALL CENTER 2026 -- CHANNEL x STAFF ACTION x STATUS
+-- Channel source: crm_source (field 534651, entered manually by staff)
+-- Action tag: Inbound/Outbound/No answer/Missed
 -- ============================================================
 
 WITH cc AS (
@@ -425,23 +425,23 @@ WITH cc AS (
             WHEN crm_source IN ('инстаграм')              THEN 'Instagram'
             WHEN crm_source IN ('телеграм','телеграм(и)') THEN 'Telegram'
             WHEN crm_source = 'фейсбук'                   THEN 'Facebook'
-            WHEN crm_source = 'сарафанное радио'           THEN 'Сарафанка'
-            WHEN crm_source = 'наш ученик'                 THEN 'Рекомендация'
-            WHEN crm_source = 'дтм тест'                   THEN 'ДТМ тест'
+            WHEN crm_source = 'сарафанное радио'           THEN 'Word of mouth'
+            WHEN crm_source = 'наш ученик'                 THEN 'Referral'
+            WHEN crm_source = 'дтм тест'                   THEN 'DTM test'
             WHEN crm_source = 'сайт'
-                 OR source IN ('site_quiz','site_web')     THEN 'Сайт/Квиз'
+                 OR source IN ('site_quiz','site_web')     THEN 'Site/Quiz'
             WHEN utm_source = 'google' AND utm_medium='cpc' THEN 'Google Ads'
-            WHEN yclid IS NOT NULL OR utm_source IN ('yandex','yd') THEN 'Яндекс'
+            WHEN yclid IS NOT NULL OR utm_source IN ('yandex','yd') THEN 'Yandex'
             WHEN utm_source = 'chatgpt.com'                THEN 'ChatGPT'
-            ELSE 'Не определён'
+            ELSE 'Unclassified'
         END ch,
         CASE
-            WHEN tags LIKE '%Входящий%'    THEN 'Входящий звонок'
-            WHEN tags LIKE '%Исходящий%'   THEN 'Исходящий звонок'
-            WHEN tags LIKE '%Клиент не%'   THEN 'Недозвон'
-            WHEN tags LIKE '%Пропущенный%' THEN 'Пропущенный'
-            WHEN tags IS NULL OR tags = '' THEN 'Нет действия'
-            ELSE 'Другое'
+            WHEN tags LIKE '%Входящий%'    THEN 'Inbound call'
+            WHEN tags LIKE '%Исходящий%'   THEN 'Outbound call'
+            WHEN tags LIKE '%Клиент не%'   THEN 'No answer'
+            WHEN tags LIKE '%Пропущенный%' THEN 'Missed'
+            WHEN tags IS NULL OR tags = '' THEN 'No action'
+            ELSE 'Other'
         END operator_action
     FROM crm_leads
     WHERE pipeline_id = 7599026
@@ -460,8 +460,8 @@ GROUP BY ch, operator_action
 ORDER BY ch, n DESC;
 
 -- ============================================================
--- Q17: CALL CENTER 2026 — ИТОГ ПО КАНАЛУ
--- % "Нет действия" — лиды без тега звонка (конверсия может быть через чат)
+-- Q17: CALL CENTER 2026 -- SUMMARY BY CHANNEL
+-- % "No action" -- leads with no call tag (the conversion may have happened via chat)
 -- ============================================================
 
 WITH cc AS (
@@ -470,15 +470,15 @@ WITH cc AS (
             WHEN crm_source IN ('инстаграм')              THEN 'Instagram'
             WHEN crm_source IN ('телеграм','телеграм(и)') THEN 'Telegram'
             WHEN crm_source = 'фейсбук'                   THEN 'Facebook'
-            WHEN crm_source = 'сарафанное радио'           THEN 'Сарафанка'
-            WHEN crm_source = 'наш ученик'                 THEN 'Рекомендация'
-            WHEN crm_source = 'дтм тест'                   THEN 'ДТМ тест'
+            WHEN crm_source = 'сарафанное радио'           THEN 'Word of mouth'
+            WHEN crm_source = 'наш ученик'                 THEN 'Referral'
+            WHEN crm_source = 'дтм тест'                   THEN 'DTM test'
             WHEN crm_source = 'сайт'
-                 OR source IN ('site_quiz','site_web')     THEN 'Сайт/Квиз'
+                 OR source IN ('site_quiz','site_web')     THEN 'Site/Quiz'
             WHEN utm_source = 'google' AND utm_medium='cpc' THEN 'Google Ads'
-            WHEN yclid IS NOT NULL OR utm_source IN ('yandex','yd') THEN 'Яндекс'
+            WHEN yclid IS NOT NULL OR utm_source IN ('yandex','yd') THEN 'Yandex'
             WHEN utm_source = 'chatgpt.com'                THEN 'ChatGPT'
-            ELSE 'Не определён'
+            ELSE 'Unclassified'
         END ch
     FROM crm_leads
     WHERE pipeline_id = 7599026
@@ -497,19 +497,19 @@ GROUP BY ch
 ORDER BY total_leads DESC;
 
 -- ============================================================
--- Q18: ТРЁХСЕГМЕНТНАЯ КЛАССИФИКАЦИЯ КОНТАКТОВ (все воронки, 2026)
+-- Q18: THREE-SEGMENT CONTACT CLASSIFICATION (all pipelines, 2026)
 --
--- Сегмент 1 — ВЕБ: контакт имеет хотя бы один лид с тегом "Сайт" / "Сайт Квиз"
---   UTM-атрибуция внутри: Google Ads / Яндекс paid / Яндекс орг / Органика
---   Ограничение: Яндекс paid ≠ organic не разделяются без utm_medium='cpc'
+-- Segment 1 -- WEB: the contact has at least one lead tagged "Сайт" (site) / "Сайт Квиз" (site quiz)
+--   UTM attribution within it: Google Ads / Yandex paid / Yandex organic / Organic
+--   Limitation: Yandex paid vs organic can't be split without utm_medium='cpc'
 --
--- Сегмент 2 — ЗВОНОК (чистый): тег "Входящий" / "Пропущенный",
---   НО у этого контакта нет ни одного лида с тегом "Сайт"
+-- Segment 2 -- CALL (pure): tagged "Inbound" / "Missed",
+--   BUT this contact has no lead tagged "Сайт" (site)
 --
--- Сегмент 3 — СОЦСЕТИ/РУЧНЫЕ: всё остальное.
---   crm_source (поле 534651, ручная разметка оператора) — лучший доступный сигнал.
---   Кавалитация: оператор может проставить "сарафанка" на лид с UTM — это шум,
---   но в эту группу попадают только лиды без Сайт-тегов и без UTM, т.е. точно не веб.
+-- Segment 3 -- SOCIAL/MANUAL: everything else.
+--   crm_source (field 534651, entered manually by staff) is the best signal available.
+--   Caveat: staff can mark a lead "word of mouth" even if it has a UTM tag -- that's noise,
+--   but only leads with no site tags and no UTM land in this group, i.e. definitely not web.
 -- ============================================================
 
 WITH cs AS (
@@ -534,23 +534,23 @@ WITH cs AS (
     FROM crm_leads
     WHERE is_bot=0 AND contact_id IS NOT NULL
     GROUP BY contact_id
-    HAVING MIN(created_at) >= '2026-01-01'      -- только новые контакты 2026
+    HAVING MIN(created_at) >= '2026-01-01'      -- new contacts from 2026 only
 ),
 classified AS (
     SELECT *,
         CASE
-            WHEN has_web=1 AND web_google=1  THEN 'Веб → Google Ads'
-            WHEN has_web=1 AND web_yd_paid=1 THEN 'Веб → Яндекс Paid'
-            WHEN has_web=1 AND web_yd_any=1  THEN 'Веб → Яндекс (орг/неизв)'
-            WHEN has_web=1                   THEN 'Веб → Органика/Неразм'
-            WHEN has_pure_call=1             THEN 'Звонок (чистый)'
-            WHEN crm_source_any IN ('инстаграм')               THEN 'Соцсети → Instagram'
-            WHEN crm_source_any IN ('телеграм','телеграм(и)')  THEN 'Соцсети → Telegram'
-            WHEN crm_source_any = 'фейсбук'                    THEN 'Соцсети → Facebook'
-            WHEN crm_source_any = 'сарафанное радио'           THEN 'Реф → Сарафанка'
-            WHEN crm_source_any IN ('наш ученик')              THEN 'Реф → Рекомендация'
-            WHEN crm_source_any = 'дтм тест'                   THEN 'ДТМ тест'
-            ELSE 'Manual/Не определён'
+            WHEN has_web=1 AND web_google=1  THEN 'Web → Google Ads'
+            WHEN has_web=1 AND web_yd_paid=1 THEN 'Web → Yandex Paid'
+            WHEN has_web=1 AND web_yd_any=1  THEN 'Web → Yandex (organic/unknown)'
+            WHEN has_web=1                   THEN 'Web → Organic/Untagged'
+            WHEN has_pure_call=1             THEN 'Call (pure)'
+            WHEN crm_source_any IN ('инстаграм')               THEN 'Social → Instagram'
+            WHEN crm_source_any IN ('телеграм','телеграм(и)')  THEN 'Social → Telegram'
+            WHEN crm_source_any = 'фейсбук'                    THEN 'Social → Facebook'
+            WHEN crm_source_any = 'сарафанное радио'           THEN 'Referral → Word of mouth'
+            WHEN crm_source_any IN ('наш ученик')              THEN 'Referral → Recommendation'
+            WHEN crm_source_any = 'дтм тест'                   THEN 'DTM test'
+            ELSE 'Manual/Unclassified'
         END segment
     FROM cs
 )
@@ -567,8 +567,8 @@ GROUP BY segment
 ORDER BY contacts DESC;
 
 -- ============================================================
--- Q19: ВЕБ — КВИЗ vs КОНТАКТНАЯ ФОРМА × UTM-КАНАЛ
--- Контакты с тегом "Сайт Квиз" vs "Сайт" (без квиза) × платный/орг
+-- Q19: WEB -- QUIZ vs CONTACT FORM x UTM CHANNEL
+-- Contacts tagged "Сайт Квиз" (site quiz) vs "Сайт" (site, no quiz) x paid/organic
 -- ============================================================
 
 WITH cw AS (
@@ -588,15 +588,15 @@ WITH cw AS (
 )
 SELECT
     CASE
-        WHEN is_form=1 AND is_quiz=0 AND g=1      THEN 'Форма → Google Ads'
-        WHEN is_form=1 AND is_quiz=0 AND yd_paid=1 THEN 'Форма → Яндекс Paid'
-        WHEN is_form=1 AND is_quiz=0 AND yd_any=1 THEN 'Форма → Яндекс (орг)'
-        WHEN is_form=1 AND is_quiz=0               THEN 'Форма → Органика/Неразм'
-        WHEN is_quiz=1 AND is_form=0 AND g=1      THEN 'Квиз → Google Ads'
-        WHEN is_quiz=1 AND is_form=0 AND yd_paid=1 THEN 'Квиз → Яндекс Paid'
-        WHEN is_quiz=1 AND is_form=0 AND yd_any=1 THEN 'Квиз → Яндекс (орг)'
-        WHEN is_quiz=1 AND is_form=0               THEN 'Квиз → Органика/Неразм'
-        ELSE 'Форма + Квиз (оба тега)'
+        WHEN is_form=1 AND is_quiz=0 AND g=1      THEN 'Form → Google Ads'
+        WHEN is_form=1 AND is_quiz=0 AND yd_paid=1 THEN 'Form → Yandex Paid'
+        WHEN is_form=1 AND is_quiz=0 AND yd_any=1 THEN 'Form → Yandex (organic)'
+        WHEN is_form=1 AND is_quiz=0               THEN 'Form → Organic/Untagged'
+        WHEN is_quiz=1 AND is_form=0 AND g=1      THEN 'Quiz → Google Ads'
+        WHEN is_quiz=1 AND is_form=0 AND yd_paid=1 THEN 'Quiz → Yandex Paid'
+        WHEN is_quiz=1 AND is_form=0 AND yd_any=1 THEN 'Quiz → Yandex (organic)'
+        WHEN is_quiz=1 AND is_form=0               THEN 'Quiz → Organic/Untagged'
+        ELSE 'Form + Quiz (both tags)'
     END sub_channel,
     COUNT(*)                                       contacts,
     SUM(won)                                       won,
@@ -607,20 +607,20 @@ GROUP BY sub_channel
 ORDER BY contacts DESC;
 
 -- ============================================================
--- Q20–Q22: 12-МЕСЯЧНЫЙ АНАЛИЗ (июл 2025 – июн 2026)
--- Источник: ВСЕ воронки (Архив + CC + прочие)
--- Контакт включается по дате первого лида в периоде
+-- Q20-Q22: 12-MONTH ANALYSIS (Jul 2025 - Jun 2026)
+-- Source: ALL pipelines (Archive + Call Center + others)
+-- A contact is included based on their first lead's date within the period
 --
--- Архив (10486794): дек 2023 – дек 2025, crm_source заполнен на 78%
--- Call center (7599026): с янв 2026, crm_source заполнен на ~60%
--- Классификация каналов единая: теги → UTM → crm_source
+-- Archive (10486794): Dec 2023 - Dec 2025, crm_source filled for 78% of leads
+-- Call center (7599026): from Jan 2026, crm_source filled for ~60% of leads
+-- Shared channel classification: tags -> UTM -> crm_source
 -- ============================================================
 
--- Общий CTE контактов — используется во всех трёх запросах ниже
--- ATTACH DATABASE 'data/education_ads.db' AS ads;   -- нужен для Q22
+-- The shared contacts CTE -- used across all three queries below
+-- ATTACH DATABASE 'data/education_ads.db' AS ads;   -- needed for Q22
 
 -- ============================================================
--- Q20: ВОРОНКА ПО КАНАЛАМ — 12 МЕС
+-- Q20: FUNNEL BY CHANNEL -- 12 MONTHS
 -- ============================================================
 
 WITH all_contacts AS (
@@ -648,18 +648,18 @@ WITH all_contacts AS (
 classified AS (
     SELECT *,
         CASE
-            WHEN has_web=1 AND web_google=1   THEN 'Google Ads (веб)'
-            WHEN has_web=1 AND web_yd=1       THEN 'Яндекс (веб)'
-            WHEN has_web=1                    THEN 'Органика / неразм (веб)'
-            WHEN has_call=1                   THEN 'Входящие звонки'
+            WHEN has_web=1 AND web_google=1   THEN 'Google Ads (web)'
+            WHEN has_web=1 AND web_yd=1       THEN 'Yandex (web)'
+            WHEN has_web=1                    THEN 'Organic / untagged (web)'
+            WHEN has_call=1                   THEN 'Inbound calls'
             WHEN crm_src IN ('инстаграм')     THEN 'Instagram'
             WHEN crm_src IN ('телеграм','телеграм(и)') THEN 'Telegram'
             WHEN crm_src = 'фейсбук'          THEN 'Facebook'
-            WHEN crm_src = 'сарафанное радио' THEN 'Сарафанное радио'
-            WHEN crm_src IN ('наш ученик')    THEN 'Рекомендация'
-            WHEN crm_src = 'наружная реклама' THEN 'Наружная реклама'
-            WHEN crm_src IN ('дтм тест','рассылка дтм') THEN 'ДТМ тест'
-            ELSE 'Не определён'
+            WHEN crm_src = 'сарафанное радио' THEN 'Word of mouth'
+            WHEN crm_src IN ('наш ученик')    THEN 'Referral'
+            WHEN crm_src = 'наружная реклама' THEN 'Outdoor advertising'
+            WHEN crm_src IN ('дтм тест','рассылка дтм') THEN 'DTM test'
+            ELSE 'Unclassified'
         END channel
     FROM all_contacts
 )
@@ -674,9 +674,9 @@ GROUP BY channel
 ORDER BY contacts DESC;
 
 -- ============================================================
--- Q21: ТРЕНД ПО МЕСЯЦАМ — 12 МЕС
--- Контакты + CR + Google Ads расход + Google-лиды из CRM
--- Примечание: Google Ads требует ATTACH ads БД
+-- Q21: MONTHLY TREND -- 12 MONTHS
+-- Contacts + CR + Google Ads spend + Google leads from CRM
+-- Note: the Google Ads figures require ATTACH-ing the ads database
 -- ============================================================
 
 WITH all_contacts AS (
@@ -721,9 +721,9 @@ LEFT JOIN monthly_gleads g ON g.m=c.m
 ORDER BY c.m;
 
 -- ============================================================
--- Q22: GOOGLE ADS — РАСХОД × CRM ЛИДЫ × CPL (12 МЕС)
--- Матч по campaign_id, зашитому в utm_campaign ('|cid|12345')
--- Кампании без |cid| (напр. fk_sert_pmax) в join не попадут
+-- Q22: GOOGLE ADS -- SPEND x CRM LEADS x CPL (12 MONTHS)
+-- Matched via campaign_id embedded in utm_campaign ('|cid|12345')
+-- Campaigns without |cid| (e.g. fk_sert_pmax) won't appear in the join
 -- ============================================================
 
 WITH crm_by_cid AS (

@@ -1,7 +1,7 @@
 """
 ETL: Google Ads → medical_ads.db
-Аккаунт медицинской клиники, период: доступная история.
-Исключаем кампанию-зомби 21516649341 (завершённый эксперимент).
+Medical clinic account, full available history.
+Excludes a zombie campaign (21516649341) — a finished experiment stuck in the account.
 """
 
 import os, sys, sqlite3
@@ -10,13 +10,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 sys.stdout.reconfigure(encoding="utf-8")
-load_dotenv(Path("C:/projects/my-project/google_ads/.env"), override=True)
+load_dotenv(Path(os.getenv("SHARED_ENV_PATH", Path(__file__).parent / ".env")), override=True)
 
-sys.path.insert(0, str(Path("C:/projects/my-project")))
 from google.ads.googleads.client import GoogleAdsClient
 
 CUSTOMER_ID  = "5159672135"
-EXCLUDE_CAMP = 21516649341   # кампания-зомби, исключать везде
+EXCLUDE_CAMP = 21516649341   # zombie campaign, exclude everywhere
 DB_PATH      = Path(__file__).parent.parent / "data" / "medical_ads.db"
 INITIAL_DAYS = 540
 REFRESH_DAYS = 7
@@ -225,29 +224,29 @@ def main():
     init_db(conn)
 
     start_date, end_date = get_date_range(conn)
-    print(f"Период: {start_date} → {end_date}")
+    print(f"Period: {start_date} → {end_date}")
 
     client = get_client()
 
-    print("Кампании...", end=" ", flush=True)
+    print("Campaigns...", end=" ", flush=True)
     n = upsert(conn, "ads_campaigns", fetch_campaigns(client, start_date, end_date))
-    conn.commit(); print(f"{n} строк")
+    conn.commit(); print(f"{n} rows")
 
-    print("Ключевые слова...", end=" ", flush=True)
+    print("Keywords...", end=" ", flush=True)
     n = upsert(conn, "ads_keywords", fetch_keywords(client, start_date, end_date))
-    conn.commit(); print(f"{n} строк")
+    conn.commit(); print(f"{n} rows")
 
-    print("Поисковые запросы (≤90 дней)...", end=" ", flush=True)
+    print("Search terms (last 90 days)...", end=" ", flush=True)
     n = upsert(conn, "ads_search_terms", fetch_search_terms(client, start_date, end_date))
-    conn.commit(); print(f"{n} строк")
+    conn.commit(); print(f"{n} rows")
 
-    print("\n=== ЗАГРУЖЕНО ===")
+    print("\n=== LOADED ===")
     for tbl in ("ads_campaigns", "ads_keywords", "ads_search_terms"):
         r = conn.execute(f"SELECT COUNT(*), MIN(date), MAX(date) FROM {tbl}").fetchone()
-        print(f"  {tbl:<22} {r[0]:>7} строк | {r[1]} → {r[2]}")
+        print(f"  {tbl:<22} {r[0]:>7} rows | {r[1]} → {r[2]}")
 
     conn.close()
-    print("\nГотово.")
+    print("\nDone.")
 
 
 if __name__ == "__main__":

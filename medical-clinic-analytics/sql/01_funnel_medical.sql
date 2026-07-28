@@ -1,5 +1,4 @@
--- Воронка: канал → лиды → сделки
--- Фаза 2, Неделя 3-4: JOIN + агрегации + CTE
+-- Funnel: channel → leads → deals
 SELECT
     source,
     COUNT(*)                                   AS leads_total,
@@ -11,20 +10,20 @@ GROUP BY source
 ORDER BY leads_total DESC;
 
 /*
-РЕЗУЛЬТАТ: source → leads / won / lost / conv_pct
-  call         → наибольший conv% (31.4%), основной канал реальных пациентов
-  site_paid    → 510 лидов, utm_medium=cpc в CRM. Но до реального приёма
-                 доходят только 16 из 510 (3.1%) — остальные оседают в воронке База.
-  site_organic → схожая картина с site_paid по доходимости
-  other        → соцсети, мессенджеры, без атрибуции
+RESULT: source → leads / won / lost / conv_pct
+  call         → highest conv% (31.4%), the main channel for real patients
+  site_paid    → 510 leads, utm_medium=cpc in CRM. But only 16 of 510 (3.1%)
+                 make it to an actual appointment — the rest sit in the "Base" stage.
+  site_organic → similar completion picture to site_paid
+  other        → social/messengers, no attribution
 
-NB: site_paid < GA4 paid forms (351) не из-за потери UTM, а из-за разной
-логики атрибуции: CRM берёт utm из URL напрямую, GA4 — через куки/сессии
-(блокируется адблокерами). Дубли в CRM: 15 шт, на картину не влияют.
-Подробнее: sql/02_gap_analysis.sql
+NB: site_paid being lower than GA4's paid-form count (351) isn't lost UTM data —
+it's two different attribution methods: CRM reads UTM from the URL directly,
+GA4 reads it from a cookie/session (which ad blockers can strip). CRM duplicates:
+15 records, don't affect the picture. Details: sql/02_gap_analysis_medical.sql
 */
 
--- Воронка по pipeline
+-- Funnel by pipeline
 SELECT
     pipeline_id,
     COUNT(*)                                                           AS leads_total,
@@ -36,25 +35,25 @@ GROUP BY pipeline_id
 ORDER BY leads_total DESC;
 
 /*
-┌─────────────┬──────────────────────────┬───────────────────────────────────┐
-│ pipeline_id │         Название         │            Смысл "won"            │
-├─────────────┼──────────────────────────┼───────────────────────────────────┤
-│ 10176374    │ База                     │ Первичный пул всех новых лидов    │
-├─────────────┼──────────────────────────┼───────────────────────────────────┤
-│ 7844402     │ Касание/Квалификация     │ Квалифицированный, готов к записи │
-├─────────────┼──────────────────────────┼───────────────────────────────────┤
-│ 10176362    │ Назначение/приём         │ Приём состоялся                   │
-├─────────────┼──────────────────────────┼───────────────────────────────────┤
-│ 10298490    │ Повторные взаимодействия │ Реактивация старых лидов          │
-└─────────────┴──────────────────────────┴───────────────────────────────────┘
-Итоговая картина структуры:
-- База — всё новое входящее, цена приблизительная
-- Касание/Квалификация — отдельный поток, возможно холодные или требующие квалификации
-- Назначение — факт записи с реальной ценой услуги
-- Повторные — реактивация, отдельный поток
+┌─────────────┬───────────────────────┬─────────────────────────────────────┐
+│ pipeline_id │         Name          │           What "won" means           │
+├─────────────┼───────────────────────┼─────────────────────────────────────┤
+│ 10176374    │ Base                  │ Initial pool of all new leads        │
+├─────────────┼───────────────────────┼─────────────────────────────────────┤
+│ 7844402     │ Touch/Qualification   │ Qualified, ready to book             │
+├─────────────┼───────────────────────┼─────────────────────────────────────┤
+│ 10176362    │ Appointment           │ Appointment actually took place      │
+├─────────────┼───────────────────────┼─────────────────────────────────────┤
+│ 10298490    │ Repeat interactions   │ Reactivation of older leads          │
+└─────────────┴───────────────────────┴─────────────────────────────────────┘
+Structural summary:
+- Base — all new inbound leads, cost is approximate
+- Touch/Qualification — a separate stream, often cold or needing qualification
+- Appointment — a booking with the real service price attached
+- Repeat — reactivation, a separate stream
 */
 
---контакты ,у которых лиды в нескольких воронках, чтобы отследить путь лида
+-- Contacts whose leads span more than one pipeline, to trace the lead's path
 SELECT
     contact_id,
     COUNT(DISTINCT pipeline_id)          AS pipelines_count,
@@ -69,8 +68,8 @@ HAVING pipelines_count > 1
 ORDER BY pipelines_count DESC, leads_total DESC
 LIMIT 20;
 
---Сколько всего лидов прошли путь по воронке
- SELECT
+-- How many leads went through the full funnel path
+SELECT
     COUNT(DISTINCT contact_id) AS unique_contacts,
     SUM(CASE WHEN pipelines_count > 1 THEN 1 END) AS multi_pipeline,
     SUM(CASE WHEN pipelines_count = 1 THEN 1 END) AS single_pipeline
@@ -80,4 +79,3 @@ FROM (
     WHERE contact_id IS NOT NULL
     GROUP BY contact_id
 );
-

@@ -11,7 +11,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 load_dotenv(Path(__file__).parent / ".env")
-load_dotenv(Path("C:/projects/my-project/google_ads/.env"), override=True)
+load_dotenv(Path(os.getenv("SHARED_ENV_PATH", Path(__file__).parent / ".env")), override=True)
 
 DB_PATH = Path(__file__).parent.parent / "data" / "medical.db"
 PROPERTY_ID = "426154993"       # GA4 property
@@ -33,8 +33,8 @@ def _ga4_client() -> BetaAnalyticsDataClient:
 
 
 def fetch_sessions(conn):
-    """Сессии и конверсии по каналу (Paid Search, Cross-network, Organic Search, ...) по дням."""
-    print("GA4: тяну сессии по каналам...")
+    """Daily sessions and conversions by channel (Paid Search, Cross-network, Organic Search, ...)."""
+    print("GA4: fetching sessions by channel...")
     client = _ga4_client()
 
     request = RunReportRequest(
@@ -77,15 +77,15 @@ def fetch_sessions(conn):
         total += 1
 
     conn.commit()
-    print(f"  Записано строк: {total}")
+    print(f"  Rows written: {total}")
 
 
 def fetch_events(conn):
-    """Конверсионные события по дням: сколько всего и сколько из платного трафика."""
-    print("GA4: тяну конверсионные события...")
+    """Daily conversion events: total count and how much of it is paid traffic."""
+    print("GA4: fetching conversion events...")
     client = _ga4_client()
 
-    # Все конверсии по событию и medium
+    # All conversions by event and medium
     request = RunReportRequest(
         property=f"properties/{PROPERTY_ID}",
         date_ranges=[DateRange(start_date=START_DATE, end_date=END_DATE)],
@@ -99,7 +99,7 @@ def fetch_events(conn):
 
     response = client.run_report(request)
 
-    # Группируем в памяти: date + eventName → {total, paid}
+    # Aggregate in memory: date + eventName → {total, paid}
     agg = {}  # (date, event_label) → [total, paid]
 
     PAID_MEDIUMS = {"cpc", "cross-network"}
@@ -125,7 +125,7 @@ def fetch_events(conn):
         """, (date, event, total, paid))
 
     conn.commit()
-    print(f"  Записано строк: {len(agg)}")
+    print(f"  Rows written: {len(agg)}")
 
 
 if __name__ == "__main__":
@@ -133,4 +133,4 @@ if __name__ == "__main__":
     fetch_sessions(conn)
     fetch_events(conn)
     conn.close()
-    print("\nГотово.")
+    print("\nDone.")
