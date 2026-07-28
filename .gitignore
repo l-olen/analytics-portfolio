@@ -49,7 +49,19 @@ education-center-analytics/dashboards/campaign_map_local.py
 *.docx
 *.pdf
 *.png
-omt-bitumen-report/
+
+# omt-bitumen-report: only the README + a few representative code samples
+# are public; the real automation scripts, real PQ queries, and real Excel
+# data stay local (not part of the portfolio)
+omt-bitumen-report/*
+!omt-bitumen-report/README.md
+!omt-bitumen-report/pq_examples/
+!omt-bitumen-report/data-collection/
+omt-bitumen-report/data-collection/*
+!omt-bitumen-report/data-collection/currency_scraper.py
+!omt-bitumen-report/weekly/
+omt-bitumen-report/weekly/*
+!omt-bitumen-report/weekly/write_analytics.py
 medical-clinic-analytics/dashboards/anonymize_csv.py
 medical-clinic-analytics/dashboards/upload_to_sheets.py
 medical-clinic-analytics/dashboards/get_sheets_token.py

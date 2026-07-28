@@ -1,0 +1,74 @@
+// Power Query (M) example, adapted from the real report pipeline for public
+// presentation -- illustrates the supply/demand balance calculation pattern.
+// Not the literal production query; upstream tables (production/shipments,
+// foreign trade) are referenced by name as if already computed elsewhere
+// in the same workbook.
+//
+// BALANCE_BY_YEAR
+// Kazakhstan + Uzbekistan | Country | Product | Year | Production | Imports | Exports | Consumption
+// Anchor = every (Country, Product, Year) combination seen across all three
+// sources, so a country/product with e.g. production but no imports doesn't
+// silently drop a row. All figures cover months 1..ReportMonth.
+let
+    ReportYear  = Date.Year(ReportDate),
+    ReportMonth = ReportMonthNumber,
+    Countries   = {"Kazakhstan", "Uzbekistan"},
+    YearRange   = {ReportYear - 4 .. ReportYear},
+
+    ProductionSrc = Table.AddColumn(
+        Table.SelectRows(ProductionAndShipments, each
+            List.Contains(Countries, [Country])
+            and [Metric] = "Production"
+            and List.Contains(YearRange, [Year])),
+        "MonthNumber", each Number.Mod([MonthKey], 100), Int64.Type),
+    Production = Table.Group(
+        Table.SelectRows(ProductionSrc, each [MonthNumber] <= ReportMonth),
+        {"Country","Product","Year"}, {{"Production", each List.Sum([Value]), type number}}),
+
+    ImportsSrc = Table.AddColumn(
+        Table.SelectRows(ForeignTrade, each
+            List.Contains(Countries, [DestinationCountry])
+            and List.Contains(YearRange, [Year])
+            and [MonthNumber] <= ReportMonth),
+        "Country", each [DestinationCountry], type text),
+    Imports = Table.Group(ImportsSrc, {"Country","Product","Year"},
+        {{"Imports", each List.Sum([Volume_kt]), type number}}),
+
+    ExportsSrc = Table.AddColumn(
+        Table.SelectRows(ForeignTrade, each
+            List.Contains(Countries, [OriginCountry])
+            and List.Contains(YearRange, [Year])
+            and [MonthNumber] <= ReportMonth),
+        "Country", each [OriginCountry], type text),
+    Exports = Table.Group(ExportsSrc, {"Country","Product","Year"},
+        {{"Exports", each List.Sum([Volume_kt]), type number}}),
+
+    AllKeys = Table.Distinct(Table.SelectColumns(
+        Table.Combine({
+            Table.SelectColumns(Production, {"Country","Product","Year"}),
+            Table.SelectColumns(Imports,    {"Country","Product","Year"}),
+            Table.SelectColumns(Exports,    {"Country","Product","Year"})
+        }),
+        {"Country","Product","Year"}
+    )),
+
+    Step1 = Table.ExpandTableColumn(
+        Table.NestedJoin(AllKeys, {"Country","Product","Year"}, Production, {"Country","Product","Year"}, "_prod", JoinKind.LeftOuter),
+        "_prod", {"Production"}),
+    Step2 = Table.ExpandTableColumn(
+        Table.NestedJoin(Step1, {"Country","Product","Year"}, Imports, {"Country","Product","Year"}, "_imp", JoinKind.LeftOuter),
+        "_imp", {"Imports"}),
+    Step3 = Table.ExpandTableColumn(
+        Table.NestedJoin(Step2, {"Country","Product","Year"}, Exports, {"Country","Product","Year"}, "_exp", JoinKind.LeftOuter),
+        "_exp", {"Exports"}),
+
+    WithConsumption = Table.AddColumn(Step3, "Consumption", each
+        (if [Production] = null then 0 else [Production])
+        + (if [Imports] = null then 0 else [Imports])
+        - (if [Exports] = null then 0 else [Exports]),
+        type number),
+
+    Result = Table.Sort(WithConsumption,
+        {{"Country", Order.Ascending}, {"Product", Order.Ascending}, {"Year", Order.Ascending}})
+in
+    Result

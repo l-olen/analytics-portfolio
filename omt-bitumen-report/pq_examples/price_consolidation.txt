@@ -1,0 +1,130 @@
+// Power Query (M) example, adapted from the real report pipeline for public
+// presentation -- illustrates one of several data-transformation patterns
+// used across the project. Not the literal production query.
+//
+// PRICES_KZ_UZ
+// Builds one unified price table: Kazakhstan + Uzbekistan + Russia (in KZT)
+// + Russia (in UZS). Two Russia rows exist because the same ruble price is
+// converted into two different local currencies for two separate charts.
+// Filter by Unit to pick the right comparison:
+//   "thousand KZT" -> Kazakhstan + Russia (same chart)
+//   "million UZS"  -> Uzbekistan + Russia (same chart)
+// Parameters: Path_PricesKZ, Path_UzExchange, Path_PricesRF, Path_FxRates
+let
+    FileKZ = File.Contents(Param("Path_PricesKZ")),
+    FileUZ = File.Contents(Param("Path_UzExchange")),
+    FileRF = File.Contents(Param("Path_PricesRF")),
+    FileFX = File.Contents(Param("Path_FxRates")),
+
+    // === Kazakhstan: indicative price (thousand KZT/t) ===
+    KZ_Raw    = Excel.Workbook(FileKZ, null, true){[Item="KZ_by_month", Kind="Table"]}[Data],
+    KZ_Typed  = Table.TransformColumnTypes(KZ_Raw, {
+        {"Year", Int64.Type}, {"Month", Int64.Type}, {"Indicative price KZT/t", type number}}),
+    KZ_Renamed = Table.RenameColumns(KZ_Typed, {{"Month", "MonthNumber"}}),
+    KZ_Filtered = Table.SelectRows(KZ_Renamed, each [#"Indicative price KZT/t"] <> null and [#"Indicative price KZT/t"] <> 0),
+    KZ_Keyed  = Table.AddColumn(KZ_Filtered, "MonthKey", each [Year]*100+[MonthNumber], Int64.Type),
+    KZ_Dated  = Table.AddColumn(KZ_Keyed, "Date", each #date([Year],[MonthNumber],1), type date),
+    KZ_Priced = Table.AddColumn(KZ_Dated, "Price", each [#"Indicative price KZT/t"]/1000, type number),
+    KZ = Table.SelectColumns(
+        Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(KZ_Priced,
+            "Country", each "Kazakhstan", type text),
+            "PriceType", each "Average", type text),
+            "Unit", each "thousand KZT", type text),
+            "Source", each "PricesKZ", type text),
+        {"Date","Year","MonthNumber","MonthKey","Country","PriceType","Unit","Price","Source"}),
+
+    // === Uzbekistan: exchange price (million UZS/t, min/max/avg) ===
+    UZ_Raw    = Excel.Workbook(FileUZ, null, true){[Item="Bitumen_by_month", Kind="Table"]}[Data],
+    UZ_Typed  = Table.TransformColumnTypes(UZ_Raw, {
+        {"Year", Int64.Type}, {"Month", Int64.Type},
+        {"Min price, UZS", type number}, {"Max price, UZS", type number}, {"Avg price, UZS", type number}}),
+    UZ_Renamed = Table.RenameColumns(UZ_Typed, {{"Month", "MonthNumber"}}),
+    UZ_Filtered = Table.SelectRows(UZ_Renamed, each [#"Avg price, UZS"] <> null and [#"Avg price, UZS"] <> 0),
+    UZ_Keyed  = Table.AddColumn(UZ_Filtered, "MonthKey", each [Year]*100+[MonthNumber], Int64.Type),
+    UZ_Dated  = Table.AddColumn(UZ_Keyed, "Date", each #date([Year],[MonthNumber],1), type date),
+    UZ_Selected = Table.SelectColumns(UZ_Dated, {"Date","Year","MonthNumber","MonthKey",
+        "Min price, UZS","Max price, UZS","Avg price, UZS"}),
+    UZ_Unpivoted = Table.Unpivot(UZ_Selected,
+        {"Min price, UZS","Max price, UZS","Avg price, UZS"}, "TypeRaw", "PriceUZS"),
+    UZ_Typed2 = Table.AddColumn(UZ_Unpivoted, "PriceType", each
+        if [TypeRaw] = "Avg price, UZS" then "Average"
+        else if [TypeRaw] = "Min price, UZS" then "Min"
+        else "Max", type text),
+    UZ = Table.SelectColumns(
+        Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(UZ_Typed2,
+            "Country", each "Uzbekistan", type text),
+            "Unit", each "million UZS", type text),
+            "Price", each [PriceUZS]/1000000, type number),
+            "Source", each "UzExchange", type text),
+        {"Date","Year","MonthNumber","MonthKey","Country","PriceType","Unit","Price","Source"}),
+
+    // === FX rates for the Russia rows ===
+    // KZT/RUB: daily -> monthly average
+    KZT_Raw    = Excel.Workbook(FileFX, null, true){[Item="kzt_rub", Kind="Table"]}[Data],
+    KZT_Typed  = Table.TransformColumnTypes(KZT_Raw, {{"Date", type date}, {"RUB", type number}}),
+    KZT_Year   = Table.AddColumn(KZT_Typed, "Year", each Date.Year([Date]), Int64.Type),
+    KZT_Month  = Table.AddColumn(KZT_Year, "Month", each Date.Month([Date]), Int64.Type),
+    KZT_Grouped = Table.Group(KZT_Month, {"Year","Month"}, {{"KZT_RUB", each List.Average([RUB]), type number}}),
+
+    // UZS/RUB = USD/UZS / USD/RUB
+    FX_Raw    = Excel.Workbook(FileFX, null, true){[Item="All_by_month", Kind="Table"]}[Data],
+    FX_Typed  = Table.TransformColumnTypes(FX_Raw, {
+        {"Year", Int64.Type}, {"Month", Int64.Type}, {"UZS avg", type number}}),
+    FX_UZS    = Table.SelectColumns(FX_Typed, {"Year","Month","UZS avg"}),
+    RUB_Raw   = Excel.Workbook(FileFX, null, true){[Item="rub", Kind="Table"]}[Data],
+    RUB_Typed = Table.TransformColumnTypes(RUB_Raw, {{"data", type date}, {"curs", type number}}),
+    RUB_Year  = Table.AddColumn(RUB_Typed, "Year", each Date.Year([data]), Int64.Type),
+    RUB_Month = Table.AddColumn(RUB_Year, "Month", each Date.Month([data]), Int64.Type),
+    RUB_Grouped = Table.Group(RUB_Month, {"Year","Month"}, {{"USD_RUB", each List.Average([curs]), type number}}),
+    FX_Merged = Table.ExpandTableColumn(
+        Table.NestedJoin(FX_UZS, {"Year","Month"}, RUB_Grouped, {"Year","Month"}, "_r", JoinKind.LeftOuter),
+        "_r", {"USD_RUB"}),
+    FX_UZSRUB = Table.AddColumn(FX_Merged, "UZS_RUB",
+        each if [#"UZS avg"] = null or [USD_RUB] = null or [USD_RUB] = 0
+             then null else [#"UZS avg"] / [USD_RUB], type number),
+
+    // === Russia: refinery price (all refineries average, VAT included) ===
+    RF_Raw    = Excel.Workbook(FileRF, null, true){[Item="RF_by_month", Kind="Table"]}[Data],
+    RF_Typed  = Table.TransformColumnTypes(RF_Raw, {
+        {"Year", Int64.Type}, {"Month", Int64.Type}, {"Avg price incl. VAT, RUB/t", type number}}),
+    RF_Filtered = Table.SelectRows(RF_Typed, each [#"Shipping point"] = "ALL REFINERIES (average)"
+        and [#"Avg price incl. VAT, RUB/t"] <> null),
+    RF_Selected = Table.SelectColumns(RF_Filtered, {"Year","Month","Avg price incl. VAT, RUB/t"}),
+
+    // Russia price expressed in tenge (for the Kazakhstan chart)
+    RF_KZT_Joined = Table.ExpandTableColumn(
+        Table.NestedJoin(RF_Selected, {"Year","Month"}, KZT_Grouped, {"Year","Month"}, "_fx", JoinKind.LeftOuter),
+        "_fx", {"KZT_RUB"}),
+    RF_KZT_Filtered = Table.SelectRows(RF_KZT_Joined, each [KZT_RUB] <> null),
+    RF_KZT_Keyed  = Table.AddColumn(RF_KZT_Filtered, "MonthKey", each [Year]*100+[Month], Int64.Type),
+    RF_KZT_Dated  = Table.AddColumn(RF_KZT_Keyed, "Date", each #date([Year],[Month],1), type date),
+    RF_KZT_Renamed = Table.RenameColumns(RF_KZT_Dated, {{"Month","MonthNumber"}}),
+    RF_KZT = Table.SelectColumns(
+        Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(RF_KZT_Renamed,
+            "Price", each [#"Avg price incl. VAT, RUB/t"] * [KZT_RUB] / 1000, type number),
+            "Country", each "Russia", type text),
+            "PriceType", each "Average", type text),
+            "Unit", each "thousand KZT", type text),
+            "Source", each "PricesRF", type text),
+        {"Date","Year","MonthNumber","MonthKey","Country","PriceType","Unit","Price","Source"}),
+
+    // Russia price expressed in som (for the Uzbekistan chart)
+    RF_UZS_Joined = Table.ExpandTableColumn(
+        Table.NestedJoin(RF_Selected, {"Year","Month"}, FX_UZSRUB, {"Year","Month"}, "_fx", JoinKind.LeftOuter),
+        "_fx", {"UZS_RUB"}),
+    RF_UZS_Filtered = Table.SelectRows(RF_UZS_Joined, each [UZS_RUB] <> null),
+    RF_UZS_Keyed  = Table.AddColumn(RF_UZS_Filtered, "MonthKey", each [Year]*100+[Month], Int64.Type),
+    RF_UZS_Dated  = Table.AddColumn(RF_UZS_Keyed, "Date", each #date([Year],[Month],1), type date),
+    RF_UZS_Renamed = Table.RenameColumns(RF_UZS_Dated, {{"Month","MonthNumber"}}),
+    RF_UZS = Table.SelectColumns(
+        Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(Table.AddColumn(RF_UZS_Renamed,
+            "Price", each [#"Avg price incl. VAT, RUB/t"] * [UZS_RUB] / 1000000, type number),
+            "Country", each "Russia", type text),
+            "PriceType", each "Average", type text),
+            "Unit", each "million UZS", type text),
+            "Source", each "PricesRF", type text),
+        {"Date","Year","MonthNumber","MonthKey","Country","PriceType","Unit","Price","Source"}),
+
+    Final = Table.Combine({KZ, UZ, RF_KZT, RF_UZS})
+in
+    Final
