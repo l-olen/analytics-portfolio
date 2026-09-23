@@ -30,6 +30,7 @@ sql/
     02_channel_analysis_medical.sql  CTR, CPC, cost per lead by channel
     02_gap_analysis_medical.sql      GA4 vs CRM: where and why data diverges
     03_trends_medical.sql            monthly trends, period comparisons
+    04_window_functions_medical.sql  LAG() month-over-month change, rolling 3-month average
 dashboards/csv_demo/
     anonymized exports for publication
 ```
@@ -40,7 +41,7 @@ dashboards/csv_demo/
 
 - **Channel matters more than anything else in the funnel.** Phone-in leads convert to a booked appointment 20.8% of the time, versus only 2.8% for paid web traffic and 3.0% for organic. That's an order of magnitude gap between the "warm" channel and web forms.
 - **The main volume of conversions comes from phone calls, not forms.** Paid clicks on the phone number outnumber paid form submissions roughly 13x. But calls can't be attributed to a specific ad campaign — a structural attribution gap that form tracking alone can't fix.
-- **The discrepancy between GA4 and CRM paid-form counts isn't a bug.** CRM reads the UTM tag from the URL; GA4 reads it from a cookie session (which ad blockers can strip) — two different counting methods for the same event, not data loss.
+- **The discrepancy between GA4 and CRM paid-form counts isn't a bug — it's two separate, structural gaps.** Part of it comes down to how each system captures the signal: the form reaches the CRM through a plain server-side POST request, which doesn't depend on GA4's own script loading in the browser — so when an ad blocker or Safari ITP kills that script, GA4 simply never records the session, while the CRM still gets the submission. That's why CRM's count runs higher: client-side analytics structurally undercounts against server-side data, it's not a misattribution. The rest traces to a channel handoff: some people click the ad, browse the site, then message via Telegram/Instagram directly instead of submitting the tracked form — there's no form submission at all for a tag to attach to. Neither is fixable by "finding the bug"; the first needs server-side conversion tracking to close the gap, the second needs a cross-channel attribution setup (shared client ID, or messenger-side tracking) — both bigger investments than a code fix.
 
 ## Data Notes
 

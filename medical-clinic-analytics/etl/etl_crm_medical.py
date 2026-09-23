@@ -23,30 +23,16 @@ WON = 142
 LOST = 143
 
 
-def _refresh_token() -> str:
-    resp = requests.post(
-        f"{AMO_BASE}/oauth2/access_token",
-        json={
-            "client_id": os.getenv("AYA_AMO_CLIENT_ID"),
-            "client_secret": os.getenv("AYA_AMO_CLIENT_SECRET"),
-            "grant_type": "refresh_token",
-            "refresh_token": os.getenv("AYA_AMO_REFRESH_TOKEN"),
-            "redirect_uri": "https://localhost",
-        },
-    )
-    data = resp.json()
-    if "access_token" not in data:
-        raise RuntimeError(f"Token refresh failed: {data}")
+# AYA_AMO_ACCESS_TOKEN -- долгосрочный токен приватной интеграции (до 5 лет), не OAuth-пара.
+# Нет refresh_token -- если истечёт, вручную сгенерировать новый в amoCRM
+# (Настройки -> Интеграции -> эта интеграция -> "Ключи и доступы") и обновить
+# AYA_AMO_ACCESS_TOKEN в google_ads/.env (SHARED_ENV_PATH).
 
-    env_path = AMO_ENV_PATH
-    text = env_path.read_text(encoding="utf-8")
-    for key, val in [("AYA_AMO_ACCESS_TOKEN", data["access_token"]),
-                     ("AYA_AMO_REFRESH_TOKEN", data.get("refresh_token", ""))]:
-        if val and os.getenv(key) and os.getenv(key) in text:
-            text = text.replace(f"{key}={os.getenv(key)}", f"{key}={val}")
-            os.environ[key] = val
-    env_path.write_text(text, encoding="utf-8")
-    return data["access_token"]
+def _refresh_token() -> str:
+    raise RuntimeError(
+        "AYA_AMO_ACCESS_TOKEN истёк или невалиден -- сгенерировать новый долгосрочный "
+        "токен вручную в amoCRM и обновить AYA_AMO_ACCESS_TOKEN в google_ads/.env"
+    )
 
 
 def get_token() -> str:

@@ -93,40 +93,23 @@ def _migrate_columns(conn):
             pass  # already there
 
 
-def _refresh_token() -> str:
-    resp = requests.post(
-        f"{AMO_BASE}/oauth2/access_token",
-        json={
-            "client_id":     os.getenv("AMO_CLIENT_ID"),
-            "client_secret": os.getenv("AMO_CLIENT_SECRET"),
-            "grant_type":    "refresh_token",
-            "refresh_token": os.getenv("AMO_REFRESH_TOKEN"),
-            "redirect_uri":  "https://localhost",
-        },
-    )
-    data = resp.json()
-    if "access_token" not in data:
-        raise RuntimeError(f"Token refresh failed: {data}")
-
-    text = AMO_ENV_PATH.read_text(encoding="utf-8")
-    for key, val in [("AMO_ACCESS_TOKEN", data["access_token"]),
-                     ("AMO_REFRESH_TOKEN", data.get("refresh_token", ""))]:
-        if val and os.getenv(key) and os.getenv(key) in text:
-            text = text.replace(f"{key}={os.getenv(key)}", f"{key}={val}")
-            os.environ[key] = val
-    AMO_ENV_PATH.write_text(text, encoding="utf-8")
-    return data["access_token"]
-
+# BUNKER_AMO_ACCESS_TOKEN -- долгосрочный токен приватной интеграции (до 5 лет), не OAuth-пара.
+# Нет refresh_token -- если истечёт, вручную сгенерировать новый в amoCRM
+# (Настройки -> Интеграции -> эта интеграция -> "Ключи и доступы") и обновить
+# BUNKER_AMO_ACCESS_TOKEN в google_ads/.env (SHARED_ENV_PATH).
 
 def get_token() -> str:
-    token = os.getenv("AMO_ACCESS_TOKEN", "")
+    token = os.getenv("BUNKER_AMO_ACCESS_TOKEN", "")
     resp = requests.get(
         f"{AMO_BASE}/api/v4/leads",
         headers={"Authorization": f"Bearer {token}"},
         params={"limit": 1},
     )
     if resp.status_code == 401:
-        token = _refresh_token()
+        raise RuntimeError(
+            "BUNKER_AMO_ACCESS_TOKEN истёк или невалиден -- сгенерировать новый долгосрочный "
+            "токен вручную в amoCRM и обновить BUNKER_AMO_ACCESS_TOKEN в google_ads/.env"
+        )
     return token
 
 
