@@ -2,21 +2,38 @@
 
 **Python automation pipeline + web dashboard for managing Google Ads across multiple client accounts (MCC).**
 
-Weekly analysis runs unattended: pulls data from Google Ads API and GA4, sends it through Claude for interpretation, applies approved changes back to the accounts.
+The pipeline runs unattended on a schedule. It pulls data from the Google Ads API, GA4 and the CRM, uses Claude to interpret it, and applies only pre-approved changes back to the accounts. Everything else becomes a proposal for a human to approve.
+
+**Agent charter:** [`AGENT.md`](./AGENT.md) covers what the daily agent may apply on its own, what it must propose, what it may never touch, and the guardrails enforced in code.
 
 ---
 
 ## What It Does
 
-### Weekly automation cycle
+### Daily cycle
 
-1. **Keyword analysis** (`weekly_keywords.py`) — pulls 30-day search terms + keyword metrics, sends to Claude Haiku, gets back three coordinated lists: keywords to pause, new negative keywords per campaign, new keyword candidates. One Claude call sees everything at once — no contradictions between the three outputs.
+1. **Health check** (`ads_health_check.py`) runs every morning across all accounts and covers 8 dimensions:
+   - lead quality from the CRM;
+   - junk placements (auto-excluded);
+   - ad strength, with LLM rewrite suggestions;
+   - GA4 engagement as a bot detector;
+   - bidding hygiene;
+   - the remaining account budget limit;
+   - the tracking gap between CRM form leads and platform conversions;
+   - an automation guard that diffs daily snapshots and alerts on Search trend drops.
+2. **Daily agent** ([`AGENT.md`](./AGENT.md)) is a headless Claude Code session. It reads the health check and applies only Tier-1 actions through guarded tools, with a rollback check on the next day. Everything else goes to a `proposals.md` with checkboxes. Ticked items are applied exactly as written on the next run.
+
+### Weekly cycle
+
+1. **Keyword analysis** (`weekly_keywords.py`) takes 30-day search terms and keyword metrics and sends them to Claude in a single call. The output is campaign-scoped negative keywords and new keyword candidates, graded HIGH or MEDIUM. Every negative passes code-level checks before it is applied: no negative that blocks a term with a lead in the last 12 months, no brand or geo stems, a per-run cap.
 
 2. **Campaign & ad analysis** (`ads_analysis.py`) — RSA headlines/descriptions performance, Quality Score alerts, auction insights snapshot, budget pacing. Claude proposes ad copy replacements (character limits validated before writing).
 
 3. **CRM sync** (`crm_sync.py`) — offline conversions from AmoCRM to Google Ads via GCLID matching. Customer Match audience upload from CRM contacts. 4-hour cache on both CRM fetch and contact list — `--apply` reads cache, no repeated API calls.
 
-4. **Strategic analysis** (`analyst.py`) — reads cached data from steps 1–3 + GA4 funnel + CRM pipeline, produces a strategic written analysis via Claude claude-sonnet-4-6.
+4. **Data lake** (`bigquery_etl_*.py`) loads Ads, GA4 and CRM data into BigQuery. The tables are partitioned by date and use idempotent per-day reloads. Full history is backfilled, including dormant accounts. Ad performance can then be joined to actual CRM outcomes across all accounts.
+
+5. **Weekly analyst** is a second headless Claude session with a fresh view. It runs a ~14-category audit checklist covering Quality Score, landing pages and search-term waste, and writes a report ranked by money impact. It has **no edit permissions** at all, so the restriction is enforced by tooling and not only by the prompt.
 
 All scripts run in **dry-run mode by default** — print what would change, apply nothing. `--apply` flag triggers real changes.
 
@@ -33,7 +50,7 @@ Flask application at `http://localhost:5000`:
 ## Architecture
 
 ```
-Google Ads API ──► weekly_keywords.py ──► Claude Haiku ──► weekly_keywords.json
+Google Ads API ──► weekly_keywords.py ──► Claude Sonnet ──► weekly_keywords.json
                 ──► ads_analysis.py ───► Claude Haiku ──► ad_copy_candidates.json
 AmoCRM API ─────► crm_sync.py ─────────────────────────► offline conversions upload
                                                         ──► Customer Match upload
@@ -66,14 +83,26 @@ Scripts API limitation: auction insights and RSA asset pausing are not available
 | Google Ads API | `google-ads` Python client, OAuth2 |
 | GA4 | GA4 Data API v1 |
 | CRM | AmoCRM REST API |
-| LLM | Anthropic Claude API (Haiku for analysis, Sonnet for strategy) |
+| LLM | Anthropic Claude API (Sonnet), Claude Code headless sessions for the daily agent and weekly analyst |
 | Web dashboard | Flask, Plotly, SSE streaming |
-| Data | JSON cache files, Excel (xlwings for auction history) |
+| Data | BigQuery (Ads + GA4 + CRM), JSON cache files, append-only change log |
 | Scheduling | Windows Task Scheduler |
 
 ---
 
 ## Key Design Decisions
+
+**Why guardrails in code, not in the prompt?** An audit found that earlier automation had been quietly hurting the accounts:
+- a CRM sync was uploading inflated conversions;
+- a broad account-wide negative was blocking ~30% of lead-generating queries, brand terms included.
+
+Neither raised an error. Since then:
+- every change goes to an append-only change log, because the platform keeps only 30 days of history;
+- business rules are enforced in code;
+- automatic changes are capped per run;
+- the conversion upload refuses anomalous batches.
+
+**Why staged autonomy?** An action gets automated only after it has been run by a human the same way, with the same safeguards, several times. Until then the agent only proposes it. The agent can never edit its own guardrails.
 
 **Why dry-run by default?** Changes to live ad accounts are irreversible in the short term. Every script prints a preview; `--apply` requires explicit intent.
 
