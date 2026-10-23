@@ -92,11 +92,7 @@ Scripts API limitation: auction insights and RSA asset pausing are not available
 
 ## Key Design Decisions
 
-**Why guardrails in code, not in the prompt?** An audit found that earlier automation had been quietly hurting the accounts:
-- a CRM sync was uploading inflated conversions;
-- a broad account-wide negative was blocking ~30% of lead-generating queries, brand terms included.
-
-Neither raised an error. Since then:
+**Why guardrails in code, not in the prompt?** Automation on ad accounts can fail silently: an inflated conversion upload or an over-broad negative raises no error, it just distorts bidding or costs leads. And a model does not reliably follow rules that exist only in the prompt. So:
 - every change goes to an append-only change log, because the Ads API returns only 30 days of change history;
 - business rules are enforced in code;
 - automatic changes are capped per run;

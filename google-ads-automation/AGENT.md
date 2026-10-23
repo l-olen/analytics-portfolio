@@ -76,7 +76,7 @@ When the human ticks `[x]`, the next run applies it **exactly as written** and l
 
 ## 3. Guardrails live in code, not in the prompt
 
-These rules were introduced after an audit found that earlier automation had been quietly hurting the accounts. A CRM sync was uploading inflated conversions. A broad negative applied account-wide was blocking about 30% of lead-generating queries, including brand terms. Neither showed up as an error.
+Automation on ad accounts can fail silently: a bad conversion upload or an over-broad negative raises no error, it just costs leads. These rules exist so that such failures are prevented or caught the next day.
 
 1. **Every change is logged** to an append-only change log (`change_log.log_change`). The Ads API returns only 30 days of change history. This log is the long-term record of what automation did.
 2. **Business rules are enforced in code.** The model breaks rules that exist only in the prompt.
@@ -117,7 +117,7 @@ This section grows as issues are understood. Examples:
 
 - **Count leads from the CRM, not from platform conversions.** One account's platform conversions under-count form leads. "No conversions in Ads" does not mean "no leads".
 - **Map-based conversions** (directions, calls from the business profile) inflate `all_conversions`. They are not used for bidding.
-- **Budget-limit remaining** comes only from the health check (`adjusted_spending_limit − amount_served`). The agent once computed it from the wrong field and reported half the real amount.
+- **Budget-limit remaining** comes only from the health check (`adjusted_spending_limit − amount_served`). The agent does not compute it on its own from other fields.
 - **Policy-limited campaigns** in regulated verticals (healthcare) are expected and not a daily alert.
 
 ---
