@@ -78,7 +78,7 @@ When the human ticks `[x]`, the next run applies it **exactly as written** and l
 
 These rules were introduced after an audit found that earlier automation had been quietly hurting the accounts. A CRM sync was uploading inflated conversions. A broad negative applied account-wide was blocking about 30% of lead-generating queries, including brand terms. Neither showed up as an error.
 
-1. **Every change is logged** to an append-only change log (`change_log.log_change`). The platform keeps only 30 days of history. This log is the long-term record of what automation did.
+1. **Every change is logged** to an append-only change log (`change_log.log_change`). The Ads API returns only 30 days of change history. This log is the long-term record of what automation did.
 2. **Business rules are enforced in code.** The model breaks rules that exist only in the prompt.
 3. **No negative may block a term that produced a lead in the last year,** or a client's brand, geo or protected stem.
 4. **Negatives are scoped to the campaign** where the source query appeared. Never broad and account-wide.
