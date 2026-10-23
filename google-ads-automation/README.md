@@ -51,12 +51,12 @@ Flask application at `http://localhost:5000`:
 
 ```
 Google Ads API ──► weekly_keywords.py ──► Claude Sonnet ──► weekly_keywords.json
-                ──► ads_analysis.py ───► Claude Haiku ──► ad_copy_candidates.json
+                ──► ads_analysis.py ───► Claude Opus ───► ad_copy_candidates.json
 AmoCRM API ─────► crm_sync.py ─────────────────────────► offline conversions upload
                                                         ──► Customer Match upload
 GA4 Data API ───► full_report.py ──────────────────────► marketing_analysis_latest.json
 
-All cached data ──► analyst.py ──► Claude claude-sonnet-4-6 ──► strategic analysis
+All cached data ──► analyst.py ──► Claude Sonnet ──► strategic analysis
 
 app.py (Flask) ──► serves dashboard + runs scripts via subprocess SSE stream
 ```
@@ -97,7 +97,7 @@ Scripts API limitation: auction insights and RSA asset pausing are not available
 - a broad account-wide negative was blocking ~30% of lead-generating queries, brand terms included.
 
 Neither raised an error. Since then:
-- every change goes to an append-only change log, because the platform keeps only 30 days of history;
+- every change goes to an append-only change log, because the Ads API returns only 30 days of change history;
 - business rules are enforced in code;
 - automatic changes are capped per run;
 - the conversion upload refuses anomalous batches.
