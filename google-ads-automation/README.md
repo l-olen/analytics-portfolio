@@ -104,6 +104,6 @@ Scripts API limitation: auction insights and RSA asset pausing are not available
 
 **Why cache CRM data?** Fetching 30,000+ contacts on every run would exhaust API rate limits and slow the `--apply` pass. A 4-hour TTL file makes dry-run and apply symmetric.
 
-**Why one Claude call for keyword decisions?** Separate calls for "pause" vs "add negatives" vs "add keywords" produce contradictions — the model might recommend pausing a keyword while simultaneously suggesting adding it. A single call with all three tasks sees the full picture.
+**Why one Claude call for keyword decisions?** Separate calls for "add negatives" and "add keywords" produce contradictions: the model might block a term with a negative while suggesting it as a new keyword. A single call with both tasks sees the full picture.
 
 **Why SSE streaming in the dashboard?** Scripts run for 30–90 seconds. A simple HTTP response would time out or appear frozen. SSE pushes each output line to the browser as it arrives.
